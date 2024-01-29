@@ -1,13 +1,8 @@
-from enum import unique
-import enum
 import h5py
-import csv
 import yaml
 import numpy as np
-import pandas as pd
 import glob
 import copy
-import platform
 
 
 class waterTAP_dataImport:
@@ -354,18 +349,15 @@ class waterTAP_dataImport:
             found_keys = np.empty(len(dir_values), dtype=bool)
             found_keys[:] = False
             self.raw_data_file = None
-        # print(dir_values)
         if dir_values == []:
             print("root_dir_mode")
-            self.raw_data_file = self.data_file  # [cur_dir]
+            self.raw_data_file = self.data_file
             self.cur_dir = ""
         else:
             for i, key in enumerate(dir_values):
                 test = False
                 if isinstance(key, list):
                     key = list(map(str, key))
-                    # print(key, data_file.keys())
-                    # print(data_file[key[0]].keys())
                     if (
                         key[0] in data_file.keys()
                         and key[1] in data_file[key[0]].keys()
@@ -374,19 +366,10 @@ class waterTAP_dataImport:
                         cur_dir = cur_dir + "/" + key[0] + "/" + key[1]
                 else:
                     key = str(key)
-                    # print(key, data_file.keys())
                     if key in data_file.keys():
                         test = True
                         cur_dir = cur_dir + "/" + key
                 if test:
-                    # print(
-                    #     "cur_dir",
-                    #     cur_dir,
-                    # )
-                    # print(
-                    #     self.data_file[cur_dir].keys(),
-                    #     self.terminating_key in self.data_file[cur_dir].keys(),
-                    # )
                     if self.terminating_key in self.data_file[cur_dir].keys():
                         self.raw_data_file = self.data_file[cur_dir]
                         self.cur_dir = cur_dir
@@ -402,57 +385,6 @@ class waterTAP_dataImport:
     def set_data_keys(self, dlist):
         self.current_keys = dlist
         self.raw_data_file = None
-
-    def get_nice_name(self, key, type="nice_name"):
-        if "m.fs." in key:
-            key = key[2:]
-        if key in self.nice_names:
-            return self.nice_names[key][type]
-        else:
-            split_key = key.split(".")
-            return split_key[-1]
-
-    def get_nice_value(self, key, type="nice_name"):
-        if "m.fs." in key:
-            key = key[2:]
-        if key in self.nice_names:
-            try:
-                value = self.nice_names[key][type]
-            except KeyError:
-                value = None
-            return value
-
-    def get_min(self, x_axis, array_to_min):
-        unique_x = np.unique(x_axis)
-        min_array = []
-        for k in unique_x:
-            vals_to_min = np.where(k == x_axis)[0]
-            min_arg = np.argmin(array_to_min[vals_to_min])
-            min_array.append(vals_to_min[min_arg])
-        return min_array
-
-    def get_min_2D(self, x_axis, array_to_min):
-        # print(x_axis)
-        unique_axis = np.unique(np.array(x_axis, dtype=float), axis=1).T
-        print(unique_axis.shape)
-        # print(unique_axis, len(x_axis))
-        # return_axis = np.array(np.meshgrid(*unique_axis)).T.reshape(len(x_axis), -1)
-        # unique_axis = np.array(np.meshgrid(*unique_axis)).T.reshape(-1, len(x_axis))
-        # print(unique_axis)
-        # return_axis = np.array(np.meshgrid(*unique_axis)).T.reshape(len(x_axis), -1)
-        min_array = []
-
-        return_axis = []
-        print("Unieuq values", unique_axis.shape)
-        for k in unique_axis:
-            vals_to_min = np.where(
-                (k[0] == np.array(x_axis)[0]) & (k[1] == np.array(x_axis)[1])
-            )[0]
-            if len(vals_to_min) != 0:
-                min_arg = np.argmin(array_to_min[vals_to_min])
-                min_array.append(vals_to_min[min_arg])
-                return_axis.append(k)
-        return np.array(return_axis).T, np.unique(min_array)
 
 
 if __name__ == "__main__":
