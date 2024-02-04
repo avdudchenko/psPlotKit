@@ -1,2 +1,2 @@
 # Defer to setup.py contents
-.
+-e .

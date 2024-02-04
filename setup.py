@@ -9,7 +9,7 @@ LONG_DESCRIPTION = "tool kit for plotting analysis results "
 # Setting up
 setup(
     # the name must match the folder name 'verysimplemodule'
-    name="waterTapAbox",
+    name="psPlotKit",
     version=VERSION,
     author="Alexander V Dudchenko",
     author_email="<avd@slac.stanford.edu>",

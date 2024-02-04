@@ -1,6 +1,6 @@
 import pytest
 import os
-from waterTapAbox.data_manager.data_importer import waterTAP_dataImport
+from psPlotKit.data_manager.data_importer import waterTAP_dataImport
 
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
