@@ -16,6 +16,7 @@ setup(
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     packages=find_packages(),
+    python_requires=">=3.8",
     install_requires=[
         "sigfig",
         "h5py",
@@ -23,7 +24,6 @@ setup(
         "matplotlib",
         "pyyaml",
         "scipy",
-        "decimal",
     ],  # add any additional packages that
     # needs to be installed along with your package. Eg: 'caer'
     keywords=["python", "analysis_plot_kit"],
