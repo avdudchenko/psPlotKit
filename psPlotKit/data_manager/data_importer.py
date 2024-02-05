@@ -1,21 +1,18 @@
 import h5py
-import yaml
 import numpy as np
 import glob
 import copy
-import logging
+import re
+from psPlotKit.util import logger
+from psPlotKit.data_manager.ps_data import psData
+import difflib
 
-_logger = logging.getLogger(__name__)
-handler = logging.StreamHandler()
-formatter = logging.Formatter(
-    "data_manager %(asctime)s %(levelname)s: %(message)s", "%H:%M:%S"
-)
-handler.setFormatter(formatter)
-_logger.addHandler(handler)
-_logger.setLevel(logging.DEBUG)
+__author__ = "Alexander V. Dudchenko (SLAC)"
+
+_logger = logger.define_logger(__name__, "psDataImport")
 
 
-class waterTAP_dataImport:
+class psDataImport:
     def __init__(self, data_location, extensive_indexing=True):
         _logger.info("data import v0.1")
         if ".h5" not in data_location:
@@ -28,9 +25,16 @@ class waterTAP_dataImport:
         self.selected_directory = None
 
         self.file_index = {}
+        self.directory_indexes = {}
         self.get_file_directories()
         # if extensive_indexing:
         self.get_directory_contents()
+        self.directory_keys = []
+        self.only_feasible = True
+        """ specified cut off for searching for near keys """
+        self.search_cut_off = 0.6
+        """ number of near keys to return """
+        self.num_keys = 10
 
     def get_file_directories(self, term_key="outputs"):
         self.directories = []
@@ -40,7 +44,6 @@ class waterTAP_dataImport:
             if "outputs" in current_file_loc.keys():
                 if cur_dir not in self.directories:
                     self.directories.append(cur_dir)
-                    print("Added dir: {}".format(cur_dir))
                     return True
             for key in current_file_loc.keys():
                 if cur_dir == "":
@@ -52,17 +55,82 @@ class waterTAP_dataImport:
         get_directory(self.raw_data_file)
         for d in self.directories:
             self.file_index[d] = {}
+        self.get_unique_directories()
         for directory in self.directories:
             _logger.info("Found directory: {}".format(directory))
 
+    def get_unique_directories(self):
+        key_arr = []
+        for d in self.directories:
+            keys = d.split("/")
+            key_arr.append(keys)
+        key_arr = np.array(key_arr)
+        unique_dir = []
+        for row in key_arr.T:
+            uq_dirs = np.unique(row)
+            unique_dir.append(uq_dirs)
+        self.global_unique_directories = []
+        for ud in unique_dir:
+            if len(ud) > 1:
+                for k in ud:
+                    self.directory_indexes[k] = []
+                    for d in self.directories:
+                        if k in d:
+                            self.directory_indexes[k].append(d)
+                            if "unique_directory" not in self.file_index[d]:
+                                self.file_index[d]["unique_directory"] = [k]
+                            else:
+                                self.file_index[d]["unique_directory"].append(k)
+                    self.global_unique_directories.append(k)
+        _logger.info(
+            "global unique directory keys: {}".format(self.global_unique_directories)
+        )
+        for d in self.directories:
+            _logger.info(
+                "{} contains unique directory {}".format(
+                    d, self.file_index[d]["unique_directory"]
+                )
+            )
+
     def get_directory_contents(self):
+        self.sub_contents = []
         for d in self.file_index:
             file_data = self.raw_data_file[d]
+
             for k, sub_data in file_data.items():
+                if k not in self.sub_contents:
+                    self.sub_contents.append(k)
                 self.file_index[d][k] = []
                 for key in sub_data.keys():
                     self.file_index[d][k].append(key)
                     _logger.info("{} {} {}".format(d, k, key))
+        _logger.info("Data types found: {}".format(self.sub_contents))
+
+    def get_selected_directories(self):
+        selected_directories = []
+
+        if self.directory_keys == []:
+            _logger.info("Searching in all directories")
+            return self.directories
+        else:
+            for d in self.directories:
+                if all(sdk in d for sdk in self.directory_keys):
+                    selected_directories.append(d)
+                    _logger.info("User selected {}".format(d))
+            return selected_directories
+
+    def get_data(self, data_key_list):
+        selected_directories = self.get_selected_directories()
+        collected_data = {}
+        for directory in selected_directories:
+            unique_labels = ":".join(self.file_index[directory]["unique_directory"])
+            collected_data[unique_labels] = {}
+            for i, dkl in enumerate(data_key_list):
+                data_keys, data_type = self._get_nearest_key(directory, dkl)
+                for dk in data_keys:
+                    data = self._get_data_set_auto(directory, data_type, dk)
+                    collected_data[unique_labels][dk] = data
+        return collected_data
 
     def get_h5_file(self, location):
         self.data_file = h5py.File(location, "r")
@@ -73,9 +141,9 @@ class waterTAP_dataImport:
         key,
         only_feasible=True,
     ):
-        self.get_data()
+        self._get_data()
 
-        return self.get_data_set(
+        return self._get_data_set(
             key,
             main_loc="outputs",
             sub_key="value",
@@ -87,8 +155,8 @@ class waterTAP_dataImport:
         key,
         only_feasible=True,
     ):
-        self.get_data()
-        return self.get_data_set(
+        self._get_data()
+        return self._get_data_set(
             key,
             main_loc="sweep_params",
             sub_key="value",
@@ -105,7 +173,7 @@ class waterTAP_dataImport:
         nom_key="nominal_idx",
         filter_nans=True,
     ):
-        sweep_reference_raw = self.get_data_set(
+        sweep_reference_raw = self._get_data_set(
             nom_key,
             main_loc=nom_loc,
             sub_key="value",
@@ -113,7 +181,7 @@ class waterTAP_dataImport:
         sweep_reference = np.array(
             sweep_reference_raw[sweep_reference_raw == sweep_reference_raw], dtype=int
         )
-        diff_reference_raw = self.get_data_set(
+        diff_reference_raw = self._get_data_set(
             diff_key,
             main_loc=diff_loc,
             sub_key="value",
@@ -142,7 +210,48 @@ class waterTAP_dataImport:
         else:
             return delta_result
 
-    def get_data_set(
+    def _get_data_set_auto(self, directory, data_type, data_key):
+        self._get_data(directory)
+        try:
+            data = self.raw_data_file[data_type][data_key]["value"][()]
+        except (KeyError, ValueError, TypeError):
+            data = self.raw_data_file[data_type][data_key][()]
+        try:
+            units = str(self.raw_data_file[data_type][data_key]["units"][()])
+
+        except (KeyError, ValueError, TypeError):
+            units = "dimensionless"
+
+        if len(data) == 0:
+            raise ValueError(
+                "No data found for directory {} data type {} data key {}".format(
+                    directory, data_type, data_key
+                )
+            )
+        result = np.array(data, dtype=np.float64)
+        data_object = psData(result, units, self.get_feasible_idxs())
+
+        return data_object
+        # except TypeError:
+        #     return None
+
+    def _get_nearest_key(self, directory, data_key):
+        for data_type in self.sub_contents:
+            available_keys = self.file_index[directory][data_type]
+            if data_key in available_keys:
+                return [data_key], data_type
+
+            near_keys = difflib.get_close_matches(
+                data_key, available_keys, cutoff=self.search_cut_off, n=self.num_keys
+            )  # , n=0.8)
+            if near_keys != []:
+                return near_keys, data_type
+        if near_keys == []:
+            raise ValueError(
+                "Did not find {} in directory {}".format(data_key, directory)
+            )
+
+    def _get_data_set(
         self,
         key=None,
         main_loc="outputs",
@@ -150,7 +259,7 @@ class waterTAP_dataImport:
         only_feasible=True,
         datatype=np.float64,
     ):
-        self.get_data()
+        self._get_data()
         if "m.fs." in sub_key:
             sub_key = sub_key[2:]
         try:
@@ -164,23 +273,17 @@ class waterTAP_dataImport:
                 result = result[feasible]
             return result
         except TypeError:
-            print(
-                "Failed to get data from",
-                "got to dir",
-                self.cur_dir,
-            )
             return None
 
     def get_dir_keys(self, main_key):
-        self.get_data()
+        self._get_data()
         return self.raw_data_file[main_key].keys()
 
     def get_raw_data(self):
-        self.get_data()
+        self._get_data()
         return np.array(self.raw_data_file[()])
 
     def get_feasible_idxs(self, data=None, val=None):
-        self.get_data()
         if val is None:
             filtered = np.array(
                 self.raw_data_file["solve_successful"]["solve_successful"][()],
@@ -192,27 +295,8 @@ class waterTAP_dataImport:
             feasible[filtered] = True
         return filtered
 
-    def get_file_tree(self, directory, show_sub_key=False, show_only=None):
-
-        for v in list(self.raw_data_file[directory].keys()):
-            sb = ""
-            for k in list(self.raw_data_file[directory][v].keys()):
-                show = True
-                if show_only is not None:
-                    if show_only not in k:
-                        show = False
-                if show:
-                    print("|---|-", k)
-                    if show_sub_key:
-                        try:
-                            for d in list(self.raw_data_file[v][k].keys()):
-                                print("|   |----", d)
-                        except KeyError:
-                            pass
-                        print("|")
-
     def check_bounds(self, nearness_test=0.1):
-        self.get_data()
+        self._get_data()
         for v in list(self.raw_data_file.keys()):
             for k in list(self.raw_data_file[v].keys()):
                 try:
@@ -235,12 +319,11 @@ class waterTAP_dataImport:
                 except:
                     pass
 
-    def get_data(self, keys=None):
+    def _get_data(self, selected_directory=None, keys=None):
         # print("Current key set!", keys, self.current_keys)
         self.cur_dir = None
-        if self.selected_directory is not None:
-            self.cur_dir = self.selected_directory
-
+        if selected_directory is not None:
+            self.cur_dir = selected_directory
             # self.selected_directory = None
             self.raw_data_file = self.data_file[self.cur_dir]
             # print("Using directory: {}".format(self.cur_dir))
@@ -274,7 +357,7 @@ class waterTAP_dataImport:
             key_temp = [[key, str(loop_value)]]
             self.search_keys = True
             # print(key_temp)
-            self.get_data(key_temp)
+            self._get_data(key_temp)
             if format_with_loop_value or "{}" in result_key_copy:
                 try:
                     result_key = result_key_copy.format(str(loop_value))
@@ -290,7 +373,7 @@ class waterTAP_dataImport:
                         str(result_key), return_absolute=return_absolute
                     )
                 elif get_raw_data:
-                    data = self.get_data_set(
+                    data = self._get_data_set(
                         str(loop_value), main_loc=key, only_feasible=False
                     )
                 else:

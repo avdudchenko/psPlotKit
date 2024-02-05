@@ -1,6 +1,8 @@
-from analysis_plot_kit.core import (
+from psPlotKit.data_plotter import (
     fig_generator,
-    data_import,
+)
+from psPlotKit.data_manager import (
+    data_importer,
 )
 import quantities as qs
 import numpy as np
@@ -8,10 +10,10 @@ import copy
 import csv
 
 
-class waterTAP_data_collator:
+class ps_data_collator:
     def __init__(self, data_file, base_keys=None):
         if isinstance(data_file, str):
-            self.data_manager = data_import.waterTAP_dataImport(
+            self.data_manager = data_importer.waterTAP_dataImport(
                 data_file,
             )
             self.base_keys = base_keys
@@ -19,7 +21,7 @@ class waterTAP_data_collator:
             self.data_manager = {}
             self.base_keys = {}
             for key, df in data_file.items():
-                self.data_manager[key] = data_import.waterTAP_dataImport(
+                self.data_manager[key] = data_importer.waterTAP_dataImport(
                     df["file"],
                 )
                 self.base_keys[key] = df["base_keys"]
