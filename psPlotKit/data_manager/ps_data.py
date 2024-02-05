@@ -4,10 +4,11 @@ from pint import UnitRegistry
 from psPlotKit.util import logger
 
 _logger = logger.define_logger(__name__, "psdata")
+import time
 
 
 class psData:
-    def __init__(self, data_array, units, feasible_indexes):
+    def __init__(self, data_key, data_type, data_array, units, feasible_indexes):
         """
         This defines base ps data class and will store raw data and data with units
         conversions will be performed on raw and unit specific data if requested
@@ -21,19 +22,22 @@ class psData:
         to convert units
         psData.convert_units('new_unit')
         """
-        self.ureg = UnitRegistry()
-        self.ureg.define("USD=1")
+        t = time.time()
+        # self.ureg = UnitRegistry()
+        qs.USD = qs.UnitQuantity("USD")
+        # self.ureg.define("USD=1")
+        # _logger.debug("ureg took: {}".format(time.time() - t))
         # self.ureg.define("a=year")
+        self.data_key = data_key
+        self.data_type = data_type
+        self.sunits = self._convert_string_unit(units)
         self.data = data_array
         self.data_feasible = data_array[feasible_indexes]
-        self.udata = data_array * self._convert_string_unit_to_pint(units)
-        self.udata_feasible = data_array[
-            feasible_indexes
-        ] * self._convert_string_unit_to_pint(units)
-        self.sunits = units
+        self.udata = qs.Quantity(data_array, self.sunits)
+        self.udata_feasible = qs.Quantity(data_array[feasible_indexes])
         self.feasible_idx = feasible_indexes
 
-    def _convert_string_unit_to_pint(self, units):
+    def _convert_string_unit(self, units):
         if "USD" in units:
             uf = units.split("/")
             for i, u in enumerate(uf):
@@ -44,17 +48,17 @@ class psData:
         elif "1/a" in units:
             units = "1/year"
         try:
-            return self.ureg(units)
+            return units
         except AssertionError:
             _logger.warning(
                 "Could not define units for {}, using dimensionless".format(units)
             )
-            return self.ureg("dimensionless")
+            return "dimensionless"
 
-    def convert_units(self, new_units):
-        self.udata.to(new_units)
+    def to_units(self, new_units):
+        self.udata.rescale(new_units)
         self.data = self.udata.magnitude
-        self.udata_feasible.to(new_units)
+        self.udata_feasible.rescale(new_units)
         self.data_feasible = self.udata_feasible.magnitude
 
     def display_data(self):

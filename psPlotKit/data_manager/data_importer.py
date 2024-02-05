@@ -6,6 +6,7 @@ import re
 from psPlotKit.util import logger
 from psPlotKit.data_manager.ps_data import psData
 import difflib
+import time
 
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
@@ -75,7 +76,7 @@ class psDataImport:
                 for k in ud:
                     self.directory_indexes[k] = []
                     for d in self.directories:
-                        if k in d:
+                        if k in d.split("/"):
                             self.directory_indexes[k].append(d)
                             if "unique_directory" not in self.file_index[d]:
                                 self.file_index[d]["unique_directory"] = [k]
@@ -103,10 +104,11 @@ class psDataImport:
                 self.file_index[d][k] = []
                 for key in sub_data.keys():
                     self.file_index[d][k].append(key)
-                    _logger.info("{} {} {}".format(d, k, key))
+                    # _logger.info("{} {} {}".format(d, k, key))
         _logger.info("Data types found: {}".format(self.sub_contents))
 
     def get_selected_directories(self):
+        t = time.time()
         selected_directories = []
 
         if self.directory_keys == []:
@@ -117,6 +119,7 @@ class psDataImport:
                 if all(sdk in d for sdk in self.directory_keys):
                     selected_directories.append(d)
                     _logger.info("User selected {}".format(d))
+            _logger.debug("get_selected_directories took: {}".format(time.time() - t))
             return selected_directories
 
     def get_data(self, data_key_list):
@@ -125,11 +128,18 @@ class psDataImport:
         for directory in selected_directories:
             unique_labels = ":".join(self.file_index[directory]["unique_directory"])
             collected_data[unique_labels] = {}
-            for i, dkl in enumerate(data_key_list):
-                data_keys, data_type = self._get_nearest_key(directory, dkl)
-                for dk in data_keys:
+            for dkl in data_key_list:
+                if isinstance(dkl, dict):
+                    key = dkl["h5key"]
+                    return_key = dkl["return_key"]
+                else:
+                    key = dkl
+                data_keys, data_type = self._get_nearest_key(directory, key)
+                for i, dk in enumerate(data_keys):
+                    if len(data_keys) > 1:
+                        return_key = "{}_{}".format(dk, i)
                     data = self._get_data_set_auto(directory, data_type, dk)
-                    collected_data[unique_labels][dk] = data
+                    collected_data[unique_labels][return_key] = data
         return collected_data
 
     def get_h5_file(self, location):
@@ -212,13 +222,18 @@ class psDataImport:
 
     def _get_data_set_auto(self, directory, data_type, data_key):
         self._get_data(directory)
+        t = time.time()
         try:
             data = self.raw_data_file[data_type][data_key]["value"][()]
         except (KeyError, ValueError, TypeError):
             data = self.raw_data_file[data_type][data_key][()]
         try:
-            units = str(self.raw_data_file[data_type][data_key]["units"][()])
-
+            units = self.raw_data_file[data_type][data_key]["units"][()].decode()
+            print(units)
+            if units == "None":
+                units = "dimensionless"
+            # units.decode()
+            # print(units)
         except (KeyError, ValueError, TypeError):
             units = "dimensionless"
 
@@ -229,13 +244,18 @@ class psDataImport:
                 )
             )
         result = np.array(data, dtype=np.float64)
-        data_object = psData(result, units, self.get_feasible_idxs())
+        _logger.debug("_get_data_set_auto took: {}".format(time.time() - t))
+        t = time.time()
+        data_object = psData(
+            data_key, data_type, result, units, self.get_feasible_idxs()
+        )
 
         return data_object
         # except TypeError:
         #     return None
 
     def _get_nearest_key(self, directory, data_key):
+        t = time.time()
         for data_type in self.sub_contents:
             available_keys = self.file_index[directory][data_type]
             if data_key in available_keys:
@@ -244,7 +264,9 @@ class psDataImport:
             near_keys = difflib.get_close_matches(
                 data_key, available_keys, cutoff=self.search_cut_off, n=self.num_keys
             )  # , n=0.8)
+            _logger.debug("_get_nearest_key took: {}".format(time.time() - t))
             if near_keys != []:
+
                 return near_keys, data_type
         if near_keys == []:
             raise ValueError(
