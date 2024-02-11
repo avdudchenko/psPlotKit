@@ -82,6 +82,7 @@ def test_getting_data(get_data):
 
     close_key = data_manager.get_data(["reverse_osmosis.factor_membrane_replacement"])
     print(close_key)
+
     assert pytest.approx(
         close_key["pressure_exchanger:membrane_cost"][
             "fs.costing.reverse_osmosis.membrane_cost"
@@ -102,3 +103,14 @@ def test_getting_data(get_data):
     ) == [20.0, 22.5, 25.0, 27.5, 30.0]
 
     assert "pump_as_turbine:membrane_group" not in specific_directory
+
+    test_idx = "fs.RO1.ro_retentate_translator.properties_out[0.0].flow_mass_phase_comp[Liq,Ca]"
+    index_list, index_str = data_manager.get_key_indexes(test_idx)
+    print(index_list, index_str)
+    assert index_list == [0.0, "Liq", "Ca"]
+    assert index_str == "0.0,Liq,Ca"
+    test_idx = "fs.RO1.ro_retentate_translator.properties_out.flow_mass_phase_comp"
+    index_list, index_str = data_manager.get_key_indexes(test_idx)
+    print(index_list, index_str)
+    assert index_list == None
+    assert index_str == None

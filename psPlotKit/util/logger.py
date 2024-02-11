@@ -1,7 +1,7 @@
 import logging
 
 
-def define_logger(module_name, logger_name):
+def define_logger(module_name, logger_name, level="DEBUG"):
     _logger = logging.getLogger(module_name)
     handler = logging.StreamHandler()
     formatter = logging.Formatter(
@@ -9,5 +9,5 @@ def define_logger(module_name, logger_name):
     )
     handler.setFormatter(formatter)
     _logger.addHandler(handler)
-    _logger.setLevel(logging.DEBUG)
+    _logger.setLevel(level)
     return _logger
