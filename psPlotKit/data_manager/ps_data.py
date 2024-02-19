@@ -160,6 +160,9 @@ class psData:
         if "gal" in units:
             units = units.replace("gal", "gallon")
             _logger.debug("converted gal to gallon")
+        if "°C" in units:
+            units = units.replace(" °C", "*degC")
+            _logger.debug("converted C to degC")
         return units
         # except AssertionError:
         #     _logger.warning(
