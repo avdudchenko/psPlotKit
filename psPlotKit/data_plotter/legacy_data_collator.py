@@ -1860,9 +1860,6 @@ class ps_data_collator:
                     result = self.get_costs(item["loop_key"].format(str(k)))
                 else:
                     result = result + self.get_costs(item["loop_key"].format(str(k)))
-
-                # print("got key {} {}".format(k, item["loop_key"].format(str(k))))
-                # #print(result)
             except KeyError:
                 print(
                     "Not item {} for key {}".format(k, item["loop_key"].format(str(k)))
@@ -2012,15 +2009,15 @@ class ps_data_collator:
 
         for key in self.auto_gen_dict["cost_options"]["cost_groups"].keys():
             if key != "total":
-                self.auto_gen_dict["cost_options"]["cost_groups"][key][
-                    "OPEX"
-                ] = cost_results[key]["OPEX"]
-                self.auto_gen_dict["cost_options"]["cost_groups"][key][
-                    "CAPEX"
-                ] = cost_results[key]["CAPEX"]
-                self.auto_gen_dict["cost_options"]["cost_groups"][key][
-                    "total"
-                ] = cost_results[key]["total"]
+                self.auto_gen_dict["cost_options"]["cost_groups"][key]["OPEX"] = (
+                    cost_results[key]["OPEX"]
+                )
+                self.auto_gen_dict["cost_options"]["cost_groups"][key]["CAPEX"] = (
+                    cost_results[key]["CAPEX"]
+                )
+                self.auto_gen_dict["cost_options"]["cost_groups"][key]["total"] = (
+                    cost_results[key]["total"]
+                )
                 # #print(key)
                 if self.auto_gen_dict["cost_options"]["total"] is None:
                     self.auto_gen_dict["cost_options"]["total"] = copy.deepcopy(

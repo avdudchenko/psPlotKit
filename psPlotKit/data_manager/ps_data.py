@@ -2,8 +2,11 @@ import numpy as np
 import quantities as qs
 from psPlotKit.util import logger
 import re
+import copy
 
-_logger = logger.define_logger(__name__, "psdata")
+__author__ = "Alexander V. Dudchenko (SLAC)"
+
+_logger = logger.define_logger(__name__, "psdata", level="INFO")
 import time
 
 
@@ -40,13 +43,17 @@ class psData:
         self._define_custom_units()
         self.data_key = data_key
         self.data_type = data_type
-        self.data_label = data_key
-        self.sunits = self._convert_string_unit(import_units)
-        self.data = data_array
-        if feasible_indexes is None:
-            self.data_feasible = self.data
+        if data_label == None:
+            self.data_label = data_key
         else:
-            self.data_feasible = self.data[feasible_indexes]
+            self.data_label = data_label
+        self.sunits = self._convert_string_unit(import_units)
+        if isinstance(data_array, list):
+            data_array = np.array(data_array)
+        self.raw_data = data_array
+        self.data = data_array
+        # if feasible_indexes is None:
+        self.feasible_indexes = feasible_indexes
         self._assign_units()
         self.key_index = None
         self.key_index_str = None
@@ -55,19 +62,54 @@ class psData:
         if units != None:
             self.to_units(units)
 
+    def mask_data(self, user_filter=None, feasible_only=False):
+        """will reduce data with provided filter
+        user_filter must have a data object, filter_type object, and data_shape object
+        e.g.
+        user_filter.data - return indexes to use for filter
+        user_filter.filter_type - defines type of filtering
+        user_filter.data_shape - defines excat shape of input data
+
+        if filter type is not supported or found, skipes filtering without warnings enable debug log to see
+        errors"""
+        if feasible_only:
+            if self.raw_data.shape == self.feasible_indexes.shape:
+                self.data = self.raw_data.copy()[self.feasible_indexes]
+                self._assign_units()
+        if user_filter is not None:
+            if user_filter.filter_type == "2D":
+                self.data = self.raw_data.copy()
+                self.data = self._take_along(self.data, user_filter.data)
+            elif user_filter.filter_type == "1D":
+                self.data = self.raw_data.copy()[user_filter.data]
+                self._assign_units()
+            else:
+                _logger.debug(
+                    "User filter not found type:{} data shape {}".format(
+                        user_filter.filter_type, user_filter.filter_data_shape
+                    )
+                )
+
+    def _take_along(self, data, idxs):
+        reduced_data = []
+        for i, fidx in enumerate(idxs):
+            if fidx == fidx:
+                dt = data[:, i]
+                reduced_data.append(dt[int(fidx)])
+            else:
+                reduced_data.append(np.nan)
+        return np.array(reduced_data)
+
     def _define_custom_units(self):
-        qs.USD = qs.UnitQuantity("USD")
-        qs.PPM = qs.UnitQuantity("PPM", qs.g / qs.m**3, symbol="PPM")
-        self.custom_units = {"USD": qs.USD, "PPM": qs.PPM}
+        self.USD = qs.UnitQuantity("USD")
+        self.PPM = qs.UnitQuantity("PPM", qs.g / qs.m**3, symbol="PPM")
+        self.custom_units = {"USD": self.USD, "PPM": self.PPM}
 
     def _assign_units(self, manual_conversion=1):
         self.data = self.data * manual_conversion
-        self.data_feasible = self.data_feasible * manual_conversion
         qsunits = self._get_qs_unit()
         self.udata = qs.Quantity(self.data, qsunits)
-        self.udata_feasible = qs.Quantity(self.data_feasible, qsunits)
         self.data = self.udata.magnitude
-        self.data_feasible = self.udata_feasible.magnitude
         self.set_label()
 
     def set_label(self, label=None):
@@ -88,8 +130,15 @@ class psData:
 
     def _get_qs_unit(self):
         if self.sunits not in self.custom_units:
-            qsunits = self.sunits
+            try:
+                unit = qs.Quantity(1, self.sunits)
+                qsunits = self.sunits
+            except LookupError:
+                # _logger.info("created custom unit {}".format(self.sunits))
+                self.custom_units[self.sunits] = qs.UnitQuantity(self.sunits)
+                qsunits = self.custom_units[self.sunits]
         else:
+
             qsunits = self.custom_units[self.sunits]
         return qsunits
 
@@ -100,13 +149,17 @@ class psData:
                 if "USD" in u:
                     uf[i] = "USD"
             units = "/".join(uf)
-            _logger.info("converted USD orig: {}, final {}".format(uf, units))
+            _logger.debug("converted USD orig: {}, final {}".format(uf, units))
+        if "USD/a" in units:
+            units = "USD/year"
+            _logger.debug("converted USD orig: {}, final {}".format(uf, units))
+
         if "1/a" in units:
             units = "1/year"
-            _logger.info("converted 1/a to 1/year")
+            _logger.debug("converted 1/a to 1/year")
         if "gal" in units:
             units = units.replace("gal", "gallon")
-            _logger.info("converted gal to gallon")
+            _logger.debug("converted gal to gallon")
         return units
         # except AssertionError:
         #     _logger.warning(
@@ -119,8 +172,6 @@ class psData:
         qsunits = self._get_qs_unit()
         self.udata = self.udata.rescale(qsunits)
         self.data = self.udata.magnitude
-        self.udata_feasible = self.udata_feasible.rescale(qsunits)
-        self.data_feasible = self.udata_feasible.magnitude
         self.set_label()
 
     def assign_units(self, assigned_units, manual_conversion_factor=1):

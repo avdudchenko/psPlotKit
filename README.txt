@@ -6,10 +6,19 @@ Create conda env if desired
 (2) In the psPlotKit directory run 
     pip install -r requirments.txt 
 
-(3) Use either the direct api or the panel holoviz UI 
-    start ui by going into psPlotKit directory and running 
-    panel serve ui/ui.py --show 
-in cmd: python setup.py develop
+(3) Check examples directory to see how to use API 
+    Currently UI is not developed but is planned 
 
-to use:
-from analysis_plot_kit.core import fig_generator, data_import
+Status as of 2/18/2024
+-data importer API ~50% stable 
+    - needs refinments
+    - does not support import of differential data
+-plotting API
+    -fig_generator - 90%
+    -psLinePlotter - 10% stable 
+    -psBoxPlotter - 10% stable
+    -psCostPlotter - 10% stable 
+
+Anything with less <50% stability will undergo major changes. 
+
+

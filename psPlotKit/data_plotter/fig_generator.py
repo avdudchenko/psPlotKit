@@ -21,6 +21,7 @@ import math
 import copy
 from matplotlib import cm
 
+
 class figureGenerator:
     def __init__(
         self,
@@ -574,6 +575,7 @@ class figureGenerator:
         marker_overlay=None,
         marker_ranges=[1, 2, 3, 4, 5, 6],
         marker_types=["o", "d", "s", ">", "<"],
+        marker_overlay_labels=None,
         label="",
         ylabel=None,
         marker="",
@@ -626,7 +628,12 @@ class figureGenerator:
                 plot_range = np.where(
                     (marker_overlay < k) & (marker_overlay >= marker_ranges[i])
                 )[0]
+
                 if len(plot_range) > 0:
+                    if marker_overlay_labels == None:
+                        label = label
+                    else:
+                        label = marker_overlay_labels[i]
                     self.get_axis(ax_idx).plot(
                         xdata[plot_range],
                         ydata[plot_range],
@@ -1782,15 +1789,15 @@ class figureGenerator:
                 )
             if xformat == "g":
                 self.get_axis(ax_idx).xaxis.set_major_formatter(
-                    ticker.FuncFormatter(lambda y, _: "{:g}".format(y))
+                    ticker.FuncFormatter(lambda x, _: "{:g}".format(x))
                 )
 
             if xformat == "10":
                 self.get_axis(ax_idx).xaxis.set_major_formatter(
                     ticker.FuncFormatter(
-                        lambda y, pos: (
-                            "{{:.{:1d}f}}".format(int(np.maximum(-np.log10(y), 0)))
-                        ).format(y)
+                        lambda x, pos: (
+                            "{{:.{:1d}f}}".format(int(np.maximum(-np.log10(x), 0)))
+                        ).format(x)
                     )
                 )
             self.get_axis(ax_idx).xaxis.set_minor_locator(
@@ -1799,7 +1806,6 @@ class figureGenerator:
         # self.get_axis(ax_idx).yaxis.set_major_locator(ticker.FixedLocator(yticks))
         if yscale is not None:
             self.get_axis(ax_idx).set_yscale(yscale)
-
             if yscale == "log" and format_ticks:
                 if yformat == "fixed":
                     self.get_axis(ax_idx).yaxis.set_major_locator(
@@ -2141,11 +2147,11 @@ class figureGenerator:
             rows_label = [self.plotted_data["ylabel"], "|", "|", "v"]
             # print(data)
             data.append([""] + list(self.plotted_data["datax"]))
-            print(
-                self.plotted_data["datax"].shape,
-                self.plotted_data["datay"].shape,
-                self.plotted_data["dataz"].shape,
-            )
+            # print(
+            #     self.plotted_data["datax"].shape,
+            #     self.plotted_data["datay"].shape,
+            #     self.plotted_data["dataz"].shape,
+            # )
             for ik, k in enumerate(self.plotted_data["datay"]):
                 try:
                     lb = rows_label[ik]
@@ -2182,7 +2188,7 @@ class figureGenerator:
             x_flat = []
             for key in self.plotted_data.keys():
                 if key != "xlabel" and key != "ylabel" and key != "zlabel":
-                    print(self.plotted_data, key)
+                    # print(self.plotted_data, key)
                     if len(self.plotted_data[key]["datax"]) > 0:
                         header.append(key)
 
@@ -2237,271 +2243,3 @@ class figureGenerator:
             # spamwriter.writerow(header)
             for k in data:
                 spamwriter.writerow(k)
-
-
-if __name__ == "__main__":
-    data_manager = dataImport(
-        "../test_data/",
-        "output_dict",
-    )
-    data_manager.get_h5_file()
-    data_manager.load_nice_names()
-    data_manager.load_sweep_params()
-    #
-    # fg_table=figureGenerator()
-    # fg_table.init_figure(width=6.6,height=4)
-    # table_data,type_data=fg_table.dict_to_table(data_manager.sweep_params,\
-    # column_values=['model_value','lower_limit','upper_limit'],
-    # metadata_function=data_manager.get_nice_name)
-    # #print(table_data)
-    # fg_table.plot_all_tables(table_data,type_data)
-    # fg_table.save_fig('Sweep table')
-    # #fg_table.show_fig()
-    #
-    # data_manager.get_file_tree()
-    # #
-    #     #print(data_manager.get_data_set('sweep_params','fs.pressureExchanger.efficiency_pressure_exchanger[0.0]'))
-    #     dataz=data_manager.get_data_set('outputs','fs.costing.LCOW')
-    #     feasible_data=data_manager.get_feasible_idxs(dataz)
-    #
-    #     # testing scatter plot#
-    #     datax=data_manager.get_data_set('sweep_params','fs.feed_salinity')
-    #     datay=data_manager.get_data_set('outputs','fs.costing.LCOW')
-    #     fg_single_set=figureGenerator()
-    #     fg_single_set.init_figure()
-    #     for mem_cost in [50,250]:
-    #         key_vals=[['sweep_params','fs.water_recovery',0.3],
-    #                 ['sweep_params','fs.RO_apar',4.0e-12],
-    #                 ['sweep_params','fs.RO_bpar',3.5e-8],
-    #                 ['sweep_params','fs.pressureExchanger.efficiency_pressure_exchanger[0.0]',0.95],
-    #
-    #                 ['sweep_params','fs.costing_param.mem_cost',mem_cost],
-    #                 ['sweep_params','fs.costing_param.pxr_cost',600],
-    #                 ['sweep_params','fs.pump_efficiency',0.9],
-    #                 ['sweep_params','fs.costing_param.hp_pump_cost',5],
-    #                 ]
-    #                             #    ['sweep_params','fs.pressureExchanger.solvent_transfer_fraction[0.0]',0.05],
-    #
-    #         mask=data_manager.find_same_conditions(key_vals,error_percent=25,mask=feasible_data)
-    #         print(datay[mask])
-    #         fg_single_set.plot_scatter(datax[mask],datay[mask],vmin=0,vmax=2,\
-    #         label='Membrane cost = '+str(mem_cost)+' $\$$/m$^2$')
-    #     fg_single_set.set_axis([50,150],[0.0,10],data_manager.get_nice_name('fs.feed_salinity'),data_manager.get_nice_name('fs.costing.LCOW'))
-    #         #fg_single_set.add_colorbar([0,2],data_manager.get_nice_name('fs.costing.LCOW'))
-    #         #fg.save_fig()
-    #     fg_single_set.add_legend()
-    #     fg_single_set.show_fig()
-    #
-    #
-    dataz = data_manager.get_data_set("outputs", "fs.costing.LCOW")
-    feasible_data = data_manager.get_feasible_idxs(dataz)
-    # datax=data_manager.get_data_set('sweep_params','fs.feed_salinity')
-    # datay=data_manager.get_data_set('sweep_params','fs.water_recovery')*data_manager.get_nice_name('fs.water_recovery','unit_conversion')
-    # fg_grid=figureGenerator()
-    # fg_grid.init_figure(width=9.6,grid=5)
-    # fg_grid.get_grid_stats(datax[feasible_data],datay[feasible_data],dataz[feasible_data],\
-    # binx=6,biny=6,binx_range=[50,150],biny_range=[25,75],percentile=[5,25,50,75,95])
-    # fg_grid.plot_grid_data(vmin=0,vmax=10,z_axis_to_plot=[0,1,2,3,4])
-    # fg_grid.set_grid_axis([50,150],[0.25,0.75],data_manager.get_nice_name('fs.feed_salinity'),\
-    # data_manager.get_nice_name('fs.water_recovery'),percentile_labels=['5$^{th}$ percentile',\
-    # '25$^{th}$ percentile','Average','75$^{th}$ percentile','95$^{th}$ percentile'])
-    # fg_grid.add_colorbar([0,10],data_manager.get_nice_name('fs.costing.LCOW'))
-    # fg_grid.save_fig('GRID_MAP')
-    #
-    # dataz=data_manager.get_data_set('outputs','fs.costing.LCOW')
-    # feasible_data=data_manager.get_feasible_idxs(dataz)
-    # datax=data_manager.get_data_set('sweep_params','fs.feed_salinity')
-    # datay=data_manager.get_data_set('sweep_params','fs.water_recovery')*data_manager.get_nice_name('fs.water_recovery','unit_conversion')
-    # fg_grid=figureGenerator()
-    # fg_grid.init_figure(width=2.5)
-    # fg_grid.get_grid_stats(datax[feasible_data],datay[feasible_data],dataz[feasible_data],\
-    # binx=6,biny=6,binx_range=[50,150],biny_range=[25,75],percentile=[50])
-    # fg_grid.plot_grid_data(vmin=0,vmax=10,z_axis_to_plot=[0])
-    # fg_grid.set_grid_axis([50,150],[0.25,0.75],data_manager.get_nice_name('fs.feed_salinity'),\
-    # data_manager.get_nice_name('fs.water_recovery'),percentile_labels=[''])
-    # fg_grid.add_colorbar([0,10],data_manager.get_nice_name('fs.costing.LCOW'))
-    # fg_grid.save_fig('GRID_MAP')
-    # fg_grid.show_fig()
-
-    #     dataz=data_manager.get_data_set('outputs','fs.costing.LCOW')
-    #     feasible_data=data_manager.get_feasible_idxs(dataz)
-    #     datax=data_manager.get_data_set('sweep_params',"fs.pressureExchanger.solution_transfer_fraction[0.0,H2O]")
-    #     datay=data_manager.get_data_set('sweep_params',"fs.pressureExchanger.solution_transfer_fraction[0.0,NaCl]")
-    #     fg_grid=figureGenerator()
-    #     fg_grid.init_figure(width=9.6,grid=5)
-    #     fg_grid.get_grid_stats(datax[feasible_data],datay[feasible_data],dataz[feasible_data],\
-    #     binx=6,biny=6,binx_range=[0,0.1],biny_range=[0,0.1],percentile=[5,25,50,75,95])
-    #     fg_grid.plot_grid_data(vmin=0,vmax=10,z_axis_to_plot=[0,1,2,3,4])
-    #     fg_grid.set_grid_axis([0,0.1],[0,0.1],data_manager.get_nice_name("fs.pressureExchanger.solution_transfer_fraction[0.0,'H2O']"),\
-    #     data_manager.get_nice_name("fs.pressureExchanger.solution_transfer_fraction[0.0,'NaCl']"),percentile_labels=['5$^{th}$ percentile',\
-    #     '25$^{th}$ percentile','Average','75$^{th}$ percentile','95$^{th}$ percentile'],
-    #     xticks=[0,0.05,0.1],yticks=[0,0.05,0.1],xformat=3,yformat=3)
-    #     fg_grid.add_colorbar([0,10],data_manager.get_nice_name('fs.costing.LCOW'))
-    #     fg_grid.save_fig()
-    #     fg_grid.show_fig()
-    #     # testing box plot#
-    #     fg_box=figureGenerator()
-    #     fg_box.init_figure()
-    #     fg_box.plot_box(dataz[feasible_data])
-    #     fg_box.set_axis([0,2],[0,10],data_manager.get_nice_name('fs.costing.LCOW'),'',yticks=[1])
-    #     fg_box.set_axis_ticklabels(yticklabels=[data_manager.get_nice_name('fs.costing.LCOW')])
-    #     fg_box.show_fig()
-    #
-    #     dataz=data_manager.get_data_set('outputs','fs.costing.LCOW')
-    #     feasible_data=data_manager.get_feasible_idxs(dataz)
-    #     datax=data_manager.get_data_set('sweep_params',"fs.pressureExchanger.solution_transfer_fraction[0.0,H2O]")
-    #     datay=data_manager.get_data_set('sweep_params',"fs.pressureExchanger.solution_transfer_fraction[0.0,NaCl]")
-    #     fg_grid=figureGenerator()
-    #     fg_grid.init_figure(width=9.6,grid=5)
-    #     fg_grid.get_grid_stats(datax[feasible_data],datay[feasible_data],dataz[feasible_data],\
-    #     binx=6,biny=6,binx_range=[0,0.1],biny_range=[0,0.1],percentile=[5,25,50,75,95])
-    #     fg_grid.plot_grid_data(vmin=0,vmax=10,z_axis_to_plot=[0,1,2,3,4])
-    #     fg_grid.set_grid_axis([0,0.1],[0,0.1],data_manager.get_nice_name("fs.pressureExchanger.solution_transfer_fraction[0.0,'H2O']"),\
-    #     data_manager.get_nice_name("fs.pressureExchanger.solution_transfer_fraction[0.0,'NaCl']"),percentile_labels=['5$^{th}$ percentile',\
-    #     '25$^{th}$ percentile','Average','75$^{th}$ percentile','95$^{th}$ percentile'],
-    #     xticks=[0,0.05,0.1],yticks=[0,0.05,0.1],xformat=3,yformat=3)
-    #     fg_grid.add_colorbar([0,10],data_manager.get_nice_name('fs.costing.LCOW'))
-    #     fg_grid.save_fig()
-    #     fg_grid.show_fig()
-    #     # testing box plot#
-    #     fg_box=figureGenerator()
-    #     fg_box.init_figure()
-    #     fg_box.plot_box(dataz[feasible_data])
-    #     fg_box.set_axis([0,2],[0,10],data_manager.get_nice_name('fs.costing.LCOW'),'',yticks=[1])
-    #     fg_box.set_axis_ticklabels(yticklabels=[data_manager.get_nice_name('fs.costing.LCOW')])
-    #     fg_box.show_fig()
-    ###testing cdf plot#
-    # fg_cdf=figureGenerator()
-    # fg_cdf.init_figure()
-    # conditions=[[50,0.5,'50$\pm$2.5 g/L feed'],[100,0.5, '100$\pm$5 g/L feed']]
-    # for cond in conditions:
-    #     key_vals=[['sweep_params','fs.water_recovery',cond[1]],
-    #                 ['sweep_params','fs.feed_salinity',cond[0]],
-    #                 ]
-    #                             #    ['sweep_params','fs.pressureExchanger.solvent_transfer_fraction[0.0]',0.05],
-    #     mask=data_manager.find_same_conditions(key_vals,error_percent=5,mask=feasible_data)
-    #     fg_cdf.plot_cdf(data_manager.get_data_set('outputs','fs.costing.LCOW')[mask],label=cond[2])
-    # fg_cdf.set_axis([0,10],[0,1],data_manager.get_nice_name('fs.costing.LCOW'),'CDF')
-    # fg_cdf.add_legend()
-    # fg_cdf.save_fig('CDF')
-    # fg_cdf.show_fig()
-
-    # testing cdf plot#
-    fg_cdf = figureGenerator()
-    fg_cdf.init_figure(width=3.3, height=4, nrows=3, subplot_adjust=1.5)
-    conditions = [
-        [50, 0.5, 1.3, "Avg. LCOW of 1.3$\$$/m$^3$"],
-        [50, 0.5, 2.4, "Avg. LCOW of 2.4$\$$/m$^3$"],
-    ]
-    table_data = []
-    for i, cond in enumerate(conditions):
-        key_vals = [
-            ["sweep_params", "fs.water_recovery", cond[1]],
-            ["sweep_params", "fs.feed_salinity", cond[0]],
-            ["outputs", "fs.costing.LCOW", cond[2]],
-        ]
-        #    ['sweep_params','fs.pressureExchanger.solvent_transfer_fraction[0.0]',0.05],
-        mask = data_manager.find_same_conditions(
-            key_vals, error_percent=10, mask=feasible_data
-        )
-
-        fg_cdf.plot_box(
-            data_manager.get_data_set("sweep_params", "fs.costing_param.mem_cost")[
-                mask
-            ],
-            position=i + 1,
-            ax_idx=0,
-        )
-        fg_cdf.plot_box(
-            data_manager.get_data_set("sweep_params", "fs.RO_apar")[mask],
-            position=i + 1,
-            ax_idx=1,
-        )
-        fg_cdf.plot_box(
-            data_manager.get_data_set("sweep_params", "fs.RO_bpar")[mask],
-            position=i + 1,
-            ax_idx=2,
-        )
-        stats = fg_cdf.generated_stats(data_manager.sweep_params, data_manager, mask)
-        fg_table = figureGenerator()
-        fg_table.init_figure(width=6.6, height=4)
-
-        table_data, type_data = fg_table.dict_to_table(
-            stats,
-            column_values=["model_value", "5", "25", "50", "75", "95"],
-            metadata_function=data_manager.get_nice_name,
-        )
-        print(table_data)
-        fg_table.plot_all_tables(
-            table_data,
-            type_data,
-            column_positions=[1.75, 2.2, 3.1, 4, 4.9, 5.8],
-            sub_tables=[
-                [
-                    "cost metric",
-                    [
-                        "Cost metrics",
-                        "5$^{th}$",
-                        "25$^{th}$",
-                        "Average",
-                        "75$^{th}$",
-                        "95$^{th}$",
-                    ],
-                ],
-                [
-                    "performance metric",
-                    [
-                        "Performance metrics",
-                        "5$^{th}$",
-                        "25$^{th}$",
-                        "Average",
-                        "75$^{th}$",
-                        "95$^{th}$",
-                    ],
-                ],
-            ],
-        )
-        fg_table.save_fig("Sweep table" + str(i))
-        fg_table.show_fig()
-    fg_cdf.set_axis(
-        [30, 300],
-        [0, 3],
-        data_manager.get_nice_name("fs.costing_param.mem_cost"),
-        ax_idx=0,
-        yticks=[1, 2],
-        xlabelpad=0,
-    )
-    fg_cdf.set_axis(
-        [1.0e-12, 5e-12],
-        [0, 3],
-        data_manager.get_nice_name("fs.RO_apar"),
-        ylabel="Average LCOW ($\$$/m$^3$)",
-        ax_idx=1,
-        yticks=[1, 2],
-        xlabelpad=10,
-    )
-    fg_cdf.set_axis(
-        [0.5e-8, 4.5e-8],
-        [0, 3],
-        data_manager.get_nice_name("fs.RO_bpar"),
-        ax_idx=2,
-        yticks=[1, 2],
-        xlabelpad=10,
-    )
-    fg_cdf.set_axis_ticklabels(yticklabels=[1.3, 2.4], angle=0, ax_idx=0)
-    fg_cdf.set_axis_ticklabels(yticklabels=[1.3, 2.4], angle=0, ax_idx=1)
-    fg_cdf.set_axis_ticklabels(yticklabels=[1.3, 2.4], angle=0, ax_idx=2)
-    fg_cdf.add_legend(ax_idx=0)
-    fg_cdf.add_legend(ax_idx=1)
-    fg_cdf.add_legend(ax_idx=2)
-    fg_cdf.save_fig("box_plot")
-    fg_cdf.show_fig()
-    # testing scatter plot#
-    # print("Generating scatter plot")
-    # fg_scatter=figureGenerator()
-    # fg_scatter.init_figure()
-    # fg_scatter.plot_scatter(datax[feasible_data],datay[feasible_data],dataz[feasible_data],vmin=0,vmax=10)
-    # fg_scatter.set_axis([50,150],[25,75],data_manager.get_nice_name('fs.feed_salinity'),data_manager.get_nice_name('fs.water_recovery'))
-    # fg_scatter.add_colorbar([0,20],data_manager.get_nice_name('fs.costing.LCOW'))
-    # fg_scatter.save_fig()
-    # fg_scatter.show_fig()
