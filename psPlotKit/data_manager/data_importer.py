@@ -74,12 +74,10 @@ class psDataImport:
                 termination_test, data_test = self._perform_data_tests(current_file_loc)
                 if termination_test:
                     if cur_dir not in self.directories:
-                        print("termination_test", termination_test, cur_dir)
                         self.directories.append(cur_dir)
                         return False
                 elif data_test:
                     if prior_dir not in self.directories:
-                        print(data_test, prior_dir)
                         self.directories.append(prior_dir)
                         return False
                 for key in current_file_loc.keys():
@@ -105,7 +103,7 @@ class psDataImport:
         # assert False
         for d in self.directories:
             self.file_index[d] = {}
-            print(d)
+            # print(d)
         # assert False
         self.get_unique_directories()
         # assert False
@@ -127,6 +125,7 @@ class psDataImport:
                     pass
             return str_val
 
+        _logger.info("Getting directories")
         self.global_unique_directories = []
         key_arr = []
         key_len = []
@@ -171,7 +170,7 @@ class psDataImport:
                             if prior_idx >= 0 and split[idx[0] - 1] not in str(
                                 used_dir_keys
                             ):
-                            
+
                                 ldir = tuple([split[idx[0] - 1], kf])
                             else:
                                 ldir = kf
@@ -191,71 +190,40 @@ class psDataImport:
                     if kf not in self.global_unique_directories:
                         self.global_unique_directories.append(ldir)
 
-        # print(unique_dir)
-        # if len(unique_dir) > 0:
-        #     for ud in unique_dir:
-        #         for k in ud:
-        #             for d in self.directories:
-        #                 if k in d.split("/"):
-        #                     kf = str_to_num(k)
-        #                     split = d.split("/")
-        #                     if "" in split:
-        #                         split.remove("")
-        #                     idx = np.where(str(kf) == np.array(split))[0]
-        #                     if len(idx) == 1:
-        #                         try:
-        #                             prior_idx = idx[0] - 1
-        #                             if prior_idx >= 0:
-        #                                 ldir = tuple([split[idx[0] - 1], kf])
-        #                             else:
-        #                                 ldir = kf
-        #                         except IndexError:
-        #                             pass
-        #                     else:
-        #                         ldir = kf
-        #                     if ldir not in self.directory_indexes:
-        #                         self.directory_indexes[ldir] = []
-        #                     self.directory_indexes[ldir].append(d)
-        #                     if "unique_directory" not in self.file_index[d]:
-        #                         self.file_index[d]["unique_directory"] = [ldir]
-        #                     else:
-        #                         self.file_index[d]["unique_directory"].append(ldir)
-        #                     if kf not in self.global_unique_directories:
-        #                         self.global_unique_directories.append(ldir)
-        # else:
-        #     for d in self.directories:
-        #         kf = "_auto_temp"
-        #         if kf not in self.directory_indexes:
-        #             self.directory_indexes[kf] = []
-        #         self.directory_indexes[kf].append(d)
-        #         if "unique_directory" not in self.file_index[d]:
-        #             self.file_index[d]["unique_directory"] = [kf]
-        #         else:
-        #             self.file_index[d]["unique_directory"].append(kf)
-        #         if kf not in self.global_unique_directories:
-        #             self.global_unique_directories.append(kf)
         _logger.info(
             "global unique directory keys: {}".format(self.global_unique_directories)
         )
+        clean_up = []
         for d in self.directories:
-            _logger.info(
-                "{} contains unique directory {}".format(
-                    d, self.file_index[d]["unique_directory"]
+            if "unique_directory" not in self.file_index[d]:
+                clean_up.append(d)
+                _logger.info("{} contains no directory, is it empty?, removing!")
+            else:
+                _logger.info(
+                    "{} contains unique directory {}".format(
+                        d, self.file_index[d]["unique_directory"]
+                    )
                 )
-            )
+        for cl in clean_up:
+            self.directories.remove(cl)
+            del self.file_index[cl]
 
     def get_directory_contents(self):
+
         self.sub_contents = []
         self.unique_data_keys = []
         for d in self.file_index:
+            _logger.info(f"Getting directory contents for {d}")
+            ts = time.time()
             file_data = self._get_raw_data_contents(d)
+            ts = time.time()
             termination_test, _ = self._perform_data_tests(file_data)
+            ts = time.time()
             for k, sub_data in file_data.items():
                 if hasattr(sub_data, "keys"):
                     _, data_test = self._perform_data_tests(sub_data)
-                    # print(sub_data, termination_test)
+                    ts = time.time()
                     if termination_test:
-                        # print(termination_test)
                         if k not in self.sub_contents:
                             self.sub_contents.append(k)
                         if k not in self.file_index[d]:
@@ -410,7 +378,7 @@ class psDataImport:
     def get_json_file(self, location):
         with open(location) as f:
             self.data_file = json.load(f)
-            self.raw_data_file = copy.deepcopy(self.data_file)
+            self.raw_data_file = self.data_file
         self.json_mode = True
 
     def get_diff(
@@ -510,7 +478,7 @@ class psDataImport:
                         directory, data_type, data_key
                     )
                 )
-            result = np.array(data, dtype=np.float64)
+            result = data
             _logger.debug("_get_data_set_auto took: {}".format(time.time() - t))
             t = time.time()
             idx, idx_str = self.get_key_indexes(data_key)
@@ -593,7 +561,7 @@ class psDataImport:
         if self.h5_mode:
             data_file = self.data_file[d]
         elif self.json_mode:
-            data_file = copy.deepcopy(self.data_file)
+            data_file = self.data_file
             if isinstance(self.raw_data_file, dict):
                 for d in d.split("/"):
                     if d != "":

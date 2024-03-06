@@ -37,7 +37,7 @@ class linePlotter:
         for l in line_colors:
             self.line_indexes[l] = {"idx": line_colors[l], "auto": False}
 
-    def _get_color(self, label, single_group=False):
+    def _get_color(self, label, count_idx=None, single_group=False):
         if isinstance(self.line_colors, dict):
             return self.line_colors[label]
         else:
@@ -45,22 +45,41 @@ class linePlotter:
             for key in label:
                 if key in self.line_indexes:
                     idx = self.line_indexes[key]["idx"]
+                    print(key, self.line_indexes[key])
                     break
             if idx == None:
-                # _logger.info("Did not find line color group")
-                # print("auto", label)
                 if single_group:
                     auto_label = "single_group"
                 else:
                     auto_label = "auto_{}".format(label)
 
                 if auto_label in self.line_indexes:
-                    self.line_indexes[auto_label]["idx"] += 1
-                    idx = self.line_indexes[auto_label]["idx"]
-
+                    if str(count_idx) in self.line_indexes["count_idxs"]:
+                        for idx, l in enumerate(self.line_indexes["count_idxs"]):
+                            if str(count_idx) == str(l):
+                                break
+                    else:
+                        self.line_indexes[auto_label]["idx"] += 1
+                        idx = self.line_indexes[auto_label]["idx"]
+                        self.line_indexes["count_idxs"].append(count_idx)
                 else:
                     idx = 0
                     self.line_indexes[auto_label] = {"idx": 0}
+                    if "count_idxs" not in self.line_indexes:
+                        self.line_indexes["count_idxs"] = [count_idx]
+                    else:
+                        if str(count_idx) in self.line_indexes["count_idxs"]:
+                            for idx, l in enumerate(self.line_indexes["count_idxs"]):
+                                if str(count_idx) == str(l):
+                                    break
+
+                print(
+                    auto_label,
+                    self.line_indexes[auto_label],
+                    idx,
+                    count_idx,
+                    self.line_indexes["count_idxs"],
+                )
             if isinstance(idx, int):
                 color = self.line_colors[idx]
             else:
@@ -137,8 +156,6 @@ class linePlotter:
 
         print("line_groups", self.line_groups)
         for skey in self._get_ydata(selected_keys, ydata):
-            # check if we have line_groups
-            print(skey)
             opts = None
             key = None
             for key in self.line_groups:
@@ -152,7 +169,6 @@ class linePlotter:
                         opts["marker"] = "o"
                     if key not in self.line_indexes:
                         self.line_indexes[key] = {"idx": 0, "auto": True}
-
             for sk in skey:
                 if isinstance(ydata, list) or isinstance(ydata, tuple):
                     all_test = all(ykey in str(skey) for ykey in ydata)
@@ -182,7 +198,6 @@ class linePlotter:
                             _label = sk
 
                     plot_label = _label
-                    # print("self.plot_lines", self.plot_lines)
                     cur_line = {}
 
                     cur_line = {}
@@ -206,9 +221,12 @@ class linePlotter:
                     if self.line_groups != {}:
                         for g_key in self.line_groups:
                             if g_key in str(skey):
-                                _label = tuple([g_key, _label])
+
                                 plot_label.replace(g_key, "")
-                                cur_line["color"] = self._get_color(g_key)
+                                cur_line["color"] = self._get_color(
+                                    g_key, count_idx=_label
+                                )
+                                _label = tuple([g_key, _label])
                     else:
                         cur_line["color"] = self._get_color(
                             plot_label, single_group=True

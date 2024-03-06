@@ -150,6 +150,7 @@ class boxPlotter:
     def _get_group_options(self, selected_keys, xdata, ydata):
         self.box_groups = {}
         self.boxes = {}
+        self.box_positions = []
         # print("line_groups", self.line_groups)
         box_index = 0
         for ykey in ydata:
@@ -163,9 +164,12 @@ class boxPlotter:
 
                             if self._test_key_in_key(key, skey):  #    key in skey:
                                 _label = self.data_index_to_label[key]["label"]
-                                if self.data_index_to_label[key].get("index") != None:
+                                if (
+                                    self.data_index_to_label[key].get("position")
+                                    != None
+                                ):
                                     box_index = self.data_index_to_label[key].get(
-                                        "index"
+                                        "position"
                                     )
                                 if (
                                     self.data_index_to_label[key].get("max_delta")
@@ -232,6 +236,7 @@ class boxPlotter:
                         else:
                             cur_box["reversed"] = False
                         cur_box["x_pos"] = box_index
+                        self.box_positions.append(box_index)
                         vals = np.array([min_delta, max_delta])[_order]
                         cur_box["x_value"] = vals[1] - vals[0]
                         cur_box["bottom"] = vals[0]
@@ -284,14 +289,11 @@ class boxPlotter:
             self.axis_options = {}
         else:
             self.axis_options = axis_options
+            self.axis_ticklabels = axis_options
         if self.axis_options.get("xlabel") == None:
             self.axis_options["xlabel"] = self._get_axis_label(
                 self.xdata_label, self.xunit
-            )  # all lines shold share units
-        # if self.axis_options.get("ylabel") == None:
-        #     self.axis_options["ylabel"] = self._get_axis_label(
-        #         self.ydata_label, self.yunit
-        #     )  # all lines shold share units
+            )
         self.plot_imported_data(fig_options)
         if generate_plot:
             self.generate_figure()
@@ -304,26 +306,17 @@ class boxPlotter:
             self.fig = figureGenerator()
             self.fig.init_figure()
         plotted_legend = []
-        self.axis_ticklabels = {}
-        # for group, items in self.line_groups.items():
-        #     self.fig.plot_line([], [], **items)
+
         self.ylabels = []
         idx = len(self.boxes.keys()) - 1
         for box_label, box in self.boxes.items():
             if box_label != self.ylabels:
                 self.ylabels.append(box_label)
-
-            # if line.get("label") in plotted_legend:
-            #     line.pop("label")
-            # else:
-            #     plotted_legend.append(line["label"])
             box["vertical"] = False
             box["x_pos"] = idx - box["x_pos"]
-
             self.fig.plot_bar(**box)
         self.axis_ticklabels["yticklabels"] = self.ylabels[::-1]
-        # self.axis_options["yticks"] = list(len(self.ylabels))
-        self.axis_ticklabels["yticks"] = list(range(len(self.ylabels)))
+        self.axis_ticklabels["yticks"] = np.array(self.box_positions) - 0.5
 
     def generate_figure(self):
 

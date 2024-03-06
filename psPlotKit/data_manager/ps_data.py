@@ -8,6 +8,7 @@ __author__ = "Alexander V. Dudchenko (SLAC)"
 
 _logger = logger.define_logger(__name__, "psdata", level="INFO")
 import time
+import datetime
 
 
 class psData:
@@ -43,13 +44,18 @@ class psData:
         self._define_custom_units()
         self.data_key = data_key
         self.data_type = data_type
+        self._convert_iso_to_epoch = False
+
         if data_label == None:
             self.data_label = data_key
         else:
             self.data_label = data_label
         self.sunits = self._convert_string_unit(import_units)
+        if self._convert_iso_to_epoch:
+            data_array = np.array(self._iso_to_epoch(data_array))
         if isinstance(data_array, list):
-            data_array = np.array(data_array)
+            data_array = np.array(data_array, dtype=float)
+
         self.raw_data = data_array
         self.data = data_array
         # if feasible_indexes is None:
@@ -80,6 +86,7 @@ class psData:
             if user_filter.filter_type == "2D":
                 self.data = self.raw_data.copy()
                 self.data = self._take_along(self.data, user_filter.data)
+                self._assign_units()
             elif user_filter.filter_type == "1D":
                 self.data = self.raw_data.copy()[user_filter.data]
                 self._assign_units()
@@ -108,7 +115,8 @@ class psData:
     def _assign_units(self, manual_conversion=1):
         self.data = self.data * manual_conversion
         qsunits = self._get_qs_unit()
-        self.udata = qs.Quantity(self.data, qsunits)
+        self.udata = qs.Quantity(self.data[:], qsunits)
+        self.uraw_data = qs.Quantity(self.raw_data[:], qsunits)
         self.data = self.udata.magnitude
         self.set_label()
 
@@ -143,6 +151,12 @@ class psData:
         return qsunits
 
     def _convert_string_unit(self, units):
+        if units is None or units == "-":
+            return "dimensionless"
+        if "isotime" in units:
+            units = "min"
+            _logger.info("Imported ISO time - converted to epoch time in min")
+            self._convert_iso_to_epoch = True
         if "USD" in units:
             uf = units.split("/")
             for i, u in enumerate(uf):
@@ -157,24 +171,29 @@ class psData:
         if "1/a" in units:
             units = "1/year"
             _logger.debug("converted 1/a to 1/year")
+        if "PSI" in units:
+            units = units.replace("PSI", "psi")
+            _logger.debug("converted gal to gallon")
         if "gal" in units:
-            units = units.replace("gal", "gallon")
+            units = units.replace("gal", "US_liquid_gallon")
+            _logger.debug("converted gal to gallon")
+        if "gpm" in units:
+            units = units.replace("gpm", "US_liquid_gallon/min")
             _logger.debug("converted gal to gallon")
         if "°C" in units:
             units = units.replace(" °C", "*degC")
             _logger.debug("converted C to degC")
         return units
-        # except AssertionError:
-        #     _logger.warning(
-        #         "Could not define units for {}, using dimensionless".format(units)
-        #     )
-        #     return "dimensionless"
 
     def to_units(self, new_units):
         self.sunits = self._convert_string_unit(new_units)
         qsunits = self._get_qs_unit()
+        print(self.data_key, self.udata)
         self.udata = self.udata.rescale(qsunits)
-        self.data = self.udata.magnitude
+        self.uraw_data = self.uraw_data.rescale(qsunits)
+        print(self.data_key, self.udata)
+        self.data = self.udata.magnitude[:]
+        self.raw_data = self.uraw_data.magnitude
         self.set_label()
 
     def assign_units(self, assigned_units, manual_conversion_factor=1):
@@ -183,3 +202,10 @@ class psData:
 
     def display_data(self):
         _logger.info("Raw data: {}, units {}".format(self.udata))
+
+    def _iso_to_epoch(self, data):
+        # data_time = map(data, datetime.time.fromisoformat)
+        epoch_time = [
+            datetime.datetime.fromisoformat(dt).timestamp() / 60 for dt in data
+        ]
+        return epoch_time

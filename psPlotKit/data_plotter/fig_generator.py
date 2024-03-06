@@ -1780,9 +1780,9 @@ class figureGenerator:
                 self.get_axis(ax_idx).xaxis.set_major_formatter(
                     ticker.ScalarFormatter()
                 )
-                self.get_axis(ax_idx).xaxis.set_minor_formatter(
-                    ticker.ScalarFormatter()
-                )
+
+                self.get_axis(ax_idx).xaxis.set_minor_locator(ticker.NullLocator())
+                self.get_axis(ax_idx).xaxis.set_minor_formatter(ticker.NullFormatter())
             if xformat == "scalar":
                 self.get_axis(ax_idx).xaxis.set_major_formatter(
                     ticker.ScalarFormatter()

@@ -4,6 +4,7 @@ import quantities as qs
 from psPlotKit.data_manager.ps_data import psData
 from psPlotKit.data_manager.data_importer import psDataImport
 from psPlotKit.data_manager.ps_costing_tool import psCosting
+import copy
 
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
@@ -167,6 +168,11 @@ class psDataManager(dict):
         if reduced_dir in self:
             data.mask_data(self[reduced_dir])
         return data
+
+    def copy_dataset(self, source, destination):
+        data = self[source]
+        ddir, dkey = destination[:-1], destination[-1]
+        self.add_data(ddir, dkey, copy.deepcopy(data))
 
     def select_data(
         self,
@@ -358,7 +364,8 @@ class psDataManager(dict):
 
         def get_dim_data(key, to_units=None):
             if to_units is not None:
-                self[key].to_units(to_units)
+                _data = self[key]
+                _data.to_units(to_units)
                 d = self[key].data
             else:
                 d = self[key].data
