@@ -7,7 +7,7 @@ import numpy as np
 import sigfig
 from decimal import Decimal
 import matplotlib.ticker as ticker
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, NoNorm
 import scipy
 from scipy.interpolate import (
     griddata,
@@ -978,34 +978,34 @@ class figureGenerator:
             self.plotted_data.update({save_label: {"box_data": percentiles}})
 
     def build_map_data(self, x=None, y=None, z=None, x_uniqu=None, y_uniqu=None):
+        x = x.round(decimals=1)
+        y = y.round(decimals=3)
         if x_uniqu is None:
             x_uniqu = np.unique(x)
             y_uniqu = np.unique(y)
+        print(x_uniqu)
+        print(np.geomspace(1, 1000, 100))
+        # x_uniqu = np.geomspace(1, 1000, 100)
         # print(x_uniqu, y_uniqu)
+        # print(x_uniqu.size, y_uniqu.size)
+        # assert False
         z_map = np.empty((y_uniqu.shape[0], x_uniqu.shape[0]))
         z_map[:] = np.nan
         # print(np.array(x_uniqu))
         # print(np.array(y_uniqu))
         # print(z)
+        xdata = []
+        ydata = []
+
         print(x_uniqu, y_uniqu)
         for i, iz in enumerate(z):
-            ix = np.where(abs(x[i] - np.array(x_uniqu)) < 1e-12)[0]
-            iy = np.where(abs(y[i] - np.array(y_uniqu)) < 1e-12)[0]
+            ix = np.where(abs(x[i] - np.array(x_uniqu)) < 1e-5)[0]
+            iy = np.where(abs(y[i] - np.array(y_uniqu)) < 1e-5)[0]
             z_map[iy, ix] = iz
             # if iz == iz:
             #   print(iz, ix, iy, x[i], y[i])
 
         return z_map, x_uniqu, y_uniqu
-
-    # def get_contour(self, input_map, value, plot=True):
-    #     x = np.array(range(input_map.shape[1]))
-    #     y = np.array(range(input_map.shape[0]))
-    #     mesh_grid_overall = np.array(np.meshgrid(x, y))
-    #     ctr = cntr.Cntr(x, y, input_map)
-    #     res = ctr.trace(value)
-    #     nseg = len(res) // 2
-    #     segments, codes = res[:nseg], res[nseg:]
-    #     self.ax[-1].polygon
 
     def fix_nan_in_map(self, input_map):
         x = np.array(range(input_map.shape[1]))
@@ -1119,14 +1119,18 @@ class figureGenerator:
         else:
             return []  # No match found
 
-    def plot_contour(self, ax, input_map, levels, colors="black", mode="mod"):
+    def plot_contour(
+        self, ax, input_map, levels, colors="black", norm=None, mode="mod"
+    ):
         x = np.array(range(input_map.shape[1]))
         y = np.array(range(input_map.shape[0]))
 
         xx, yy = np.array(np.meshgrid(x, y))
         print(xx, levels)
 
-        return ax.contour(xx, yy, input_map, levels, colors=colors, zlevel=12)
+        return ax.contour(
+            xx, yy, input_map, levels, colors=colors, norm=norm, zlevel=12
+        )
 
     def plot_linear_contours(self, ax, input_map, x, y, levels, upscale):
         x = np.array(range(input_map.shape[1])) * upscale / input_map.shape[1]
@@ -1153,7 +1157,14 @@ class figureGenerator:
             # assas
 
     def plot_contourf(
-        self, ax, input_map, levels, colors=None, extend=None, extend_colors=None
+        self,
+        ax,
+        input_map,
+        levels,
+        colors=None,
+        extend=None,
+        extend_colors=None,
+        norm=None,
     ):
         x = np.array(range(input_map.shape[1]))
         y = np.array(range(input_map.shape[0]))
@@ -1181,7 +1192,14 @@ class figureGenerator:
         #     # cs.cmap.set_over(colors[-1])
         print("lvels", levels)
         cs = ax.contourf(
-            xx, yy, input_map, levels, colors=colors, cmap=cmap, extend=extend
+            xx,
+            yy,
+            input_map,
+            levels,
+            colors=colors,
+            cmap=cmap,
+            extend=extend,
+            norm=norm,
         )
         if extend == "max":
             cs.cmap.set_over(extend_colors)
@@ -1198,21 +1216,20 @@ class figureGenerator:
         for i, lu in enumerate(levels[1:]):
             lb, ub = levels[i - 1], levels[i]
             average_level = levels[i - 1] * 0.5 + levels[i] * 0.5
-            print(len(map_data.shape))
+            # print(len(map_data.shape))
             if len(map_data.shape) == 1:
                 idx = np.where((map_data < ub) & (map_data > lb))[0]
-                print(idx)
+                # print(idx)
                 map_data[idx] = average_level
             else:
                 for m in map_data:
                     idx = np.where((m < ub) & (m > lb))[0]
-                    print(idx)
+                    # print(idx)
                     m[idx] = average_level
 
         self.colorMaps["color_map"] = cm.get_cmap(
             self.colorMaps["color_map"], len(levels) - 1
         )
-        print(self.colorMaps["color_map"])
         return map_data
 
     def plot_map(
@@ -1253,13 +1270,18 @@ class figureGenerator:
         datax, datay = None, None
         if build_map:
             map_data, datax, datay = self.build_map_data(xdata, ydata, zdata)
+
+            # print("map", map_data)
+            # print("x", datax)
+            # print("y", datay)
+            # assert False
             if zoverlay is not None:
                 (
                     overlay_map,
                     _,
                     _,
                 ) = self.build_map_data(xdata, ydata, zoverlay)
-                print(overlay_map, zoverlay)
+
             else:
                 overlay_map = zoverlay
             if fix_nans:
@@ -1308,42 +1330,43 @@ class figureGenerator:
         if digitize_levels is not None:
             self.digitize_map(map_data, digitize_levels)
 
-        # print("--------------")
-        # print("vmin,vmax", vmin, vmax)
-        # print(map_data)
         if zscale == "log":
             norm = LogNorm(vmin=vmin, vmax=vmax)
-
-            self.colorFig = self.get_axis(ax_idx).imshow(
+        else:
+            norm = None
+            # self.colorFig = self.get_axis(ax_idx).imshow(
+            #     map_data,
+            #     cmap=self.colorMaps["color_map"],
+            #     aspect=aspect,
+            #     norm=norm,
+            #     origin="upper",
+            # )
+        # else:
+        if plot_contour is not None:
+            print("plotting countou")
+            self.contour_mode = True
+            self.colorFig = self.plot_contourf(
+                self.get_axis(ax_idx),
                 map_data,
-                cmap=self.colorMaps["color_map"],
-                aspect=aspect,
+                plot_contour,
+                contour_colors,
+                extend=extend,
+                extend_colors=extend_colors,
                 norm=norm,
-                origin="upper",
+            )
+            print(norm)
+            self.plot_contour(
+                self.get_axis(ax_idx), map_data, plot_contour, "black", norm=norm
             )
         else:
-            if plot_contour is not None:
-                self.contour_mode = True
-                self.colorFig = self.plot_contourf(
-                    self.get_axis(ax_idx),
-                    map_data,
-                    plot_contour,
-                    contour_colors,
-                    extend=extend,
-                    extend_colors=extend_colors,
-                )
-                self.plot_contour(
-                    self.get_axis(ax_idx), map_data, plot_contour, "black"
-                )
-            else:
-                self.colorFig = self.get_axis(ax_idx).imshow(
-                    map_data,
-                    vmin=vmin,
-                    vmax=vmax,
-                    cmap=self.colorMaps["color_map"],
-                    aspect=aspect,
-                    origin="upper",
-                )
+            self.colorFig = self.get_axis(ax_idx).imshow(
+                map_data,
+                vmin=vmin,
+                vmax=vmax,
+                cmap=self.colorMaps["color_map"],
+                aspect=aspect,
+                origin="upper",
+            )
         if plot_contour_lines is not None:
             self.plot_contour(
                 self.get_axis(ax_idx), map_data, plot_contour_lines, contour_line_colors
@@ -1393,96 +1416,9 @@ class figureGenerator:
             }
         )
 
-    def get_grid_stats(
-        self,
-        datax,
-        datay,
-        dataz,
-        binx=8,
-        biny=8,
-        percentile=[1, 50, 99],
-        binx_range=None,
-        biny_range=None,
-    ):
-        if binx_range is not None:
-            binsx = np.linspace(min(binx_range), max(binx_range), binx * 2).reshape(
-                int(binx), 2
-            )
-        else:
-            binsx = np.linspace(min(datax), max(datax), binx * 2).reshape(int(binx), 2)
-        if biny_range is not None:
-            binsy = np.linspace(min(biny_range), max(biny_range), biny * 2).reshape(
-                int(biny), 2
-            )
-        else:
-            binsy = np.linspace(min(datay), max(datay), biny * 2).reshape(int(biny), 2)
-        self.z_idxs_array = []
-        self.z_data_stats = np.empty((biny, binx, len(percentile)))
-        self.grid_mask = np.empty((biny, binx))
-        self.x_centers = np.average(binsx, axis=1)
-        self.y_centers = np.average(binsy, axis=1)
-
-        for y, by in enumerate(binsy):
-            for x, bx in enumerate(binsx):
-                z_idxs = np.where(
-                    (np.array(datax) >= bx[0])
-                    & (np.array(datax) < bx[1])
-                    & (np.array(datay) >= by[0])
-                    & (np.array(datay) < by[1])
-                )[0]
-                # print(z_idxs,bx,by)
-                self.z_idxs_array.append(z_idxs)
-                if len(z_idxs) == 0:
-                    self.z_data_stats[y][x] = np.empty(len(percentile))
-                    self.grid_mask[y][x] = False
-
-                else:
-                    self.z_data_stats[y][x] = np.percentile(dataz[z_idxs], percentile)
-                    # print(np.percentile(dataz[z_idxs],percentile),dataz[z_idxs])
-                    self.grid_mask[y][x] = True
-
-    def plot_grid_data(
-        self,
-        vmin,
-        vmax,
-        z_axis_to_plot,
-        aspect="auto",
-        text=True,
-        text_color="white",
-        textfontsize=8,
-        sig_figs_text=1,
-    ):
-        for zatp in z_axis_to_plot:
-            masked_data = np.ma.masked_where(
-                self.grid_mask == False, self.z_data_stats[:, :, zatp]
-            )
-            self.colorFig = self.ax[zatp].imshow(
-                masked_data,
-                vmin=vmin,
-                vmax=vmax,
-                cmap=self.colorMaps["color_map"],
-                aspect=aspect,
-            )
-            if text:
-                # print(masked_data)
-                for r, row in enumerate(masked_data):
-                    # print(row)
-                    for c, value in enumerate(row):
-                        # print(value)
-                        if value is not np.ma.masked:
-                            self.ax[zatp].text(
-                                c,
-                                r,
-                                self.format_value(value, sig_figs_text),
-                                ha="center",
-                                va="center",
-                                color=text_color,
-                                fontsize=textfontsize,
-                            )
-
     def gen_map_function(self, axisdata, scale="linear"):
         indexes = list(range(len(axisdata)))
-        # print(axisdata, indexes, scale)
+        print(axisdata, indexes, scale)
 
         # print("axis data", axisdata, indexes, scale)
         if scale == "interp":
@@ -1547,13 +1483,22 @@ class figureGenerator:
         if xticklabels is not None:
             if rotate == False:
                 angle = 0
-                ha = "center"
-                va = "top"
+                if ha is None:
+                    ha = "center"
+                if va is None:
+                    va = "top"
             if ha is None:
                 ha = "right"
             if va is None:
                 va = "top"
             if self.map_mode:
+                # print(
+                #     "dst",
+                #     self.plotted_data["datax"],
+                #     np.min(self.plotted_data["datax"]),
+                #     np.max(self.plotted_data["datax"]),
+                # )
+                # assert False
                 self.map_func_x = self.gen_map_function(
                     self.plotted_data["datax"], xscale
                 )
@@ -1565,6 +1510,7 @@ class figureGenerator:
                     offset_y = 0.5
 
                 ticks = self.map_func_x(xticklabels)
+
                 self.get_axis(ax_idx).set_xlim(offset_x, ticks[-1] + offset_y)
                 # offset = 0.5 / self.map_x_width  # / 2
                 # print(offset)
@@ -1579,8 +1525,12 @@ class figureGenerator:
             else:
                 if xticks is None:
                     xticks = list(range(len(xticklabels)))
-                self.get_axis(ax_idx).set_xlim(-0.5 + xticks[0], xticks[-1] + 0.5)
+                if xlims is None:
+                    self.get_axis(ax_idx).set_xlim(-0.5 + xticks[0], xticks[-1] + 0.5)
+                else:
+                    self.get_axis(ax_idx).set_xlim(xlims[0], xlims[1])
                 self.get_axis(ax_idx).set_xticks(xticks)
+
             if xformat is not None:
                 xticklabels = self.format_ticks(xticklabels, xformat)
             self.get_axis(ax_idx).set_xticklabels(
@@ -1869,69 +1819,6 @@ class figureGenerator:
                 self.get_axis(ax_idx).spines["left"].set_color(yaxiscolor)
         xaxiscolor = ("black",)
         yaxiscolor = ("black",)
-
-    def set_grid_axis(
-        self,
-        xlims,
-        ylims,
-        xlabel,
-        ylabel,
-        percentile_labels=["Avg."],
-        xticks=None,
-        yticks=None,
-        xformat=0,
-        yformat=2,
-    ):
-        if xticks is not None:
-            default_xticks = len(xticks)
-            xticklabels = xticks
-        else:
-            default_xticks = 3
-            xticklabels = np.linspace(xlims[0], xlims[1], default_xticks)
-        if yticks is not None:
-            default_yticks = len(yticks)
-            yticklabels = yticks
-        else:
-            default_yticks = 5
-            yticklabels = np.linspace(ylims[0], ylims[1], default_yticks)
-
-        if len(percentile_labels) == 1:
-            center_label_idx = 0
-        if len(percentile_labels) == 3:
-            center_label_idx = 1
-        if len(percentile_labels) == 5:
-            center_label_idx = 2
-
-        for l, p_label in enumerate(percentile_labels):
-            if l == center_label_idx:
-                xl = xlabel
-            else:
-                xl = ""
-            self.set_axis(
-                [-0.5, self.z_data_stats.shape[1] - 0.5],
-                [-0.5, -0.5 + self.z_data_stats.shape[0]],
-                xl,
-                ylabel,
-                default_xticks=default_xticks,
-                default_yticks=default_yticks,
-                ax_idx=l,
-            )
-            self.set_axis_ticklabels(
-                xticklabels=xticklabels,
-                angle=0,
-                ha="center",
-                va="top",
-                ax_idx=l,
-                xformat=xformat,
-            )
-            if l == 0:
-                # pass
-                self.set_axis_ticklabels(
-                    yticklabels=yticklabels, angle=0, yformat=yformat
-                )
-            else:
-                self.remove_ticks(ax_idx=l, y_axis=True)
-            self.ax[l].set_title(p_label)
 
     def add_colorbar(
         self, zlabel, zticks=None, zformat=1, zlabelpad=17, cbar=None, **kwargs

@@ -24,8 +24,10 @@ class boxPlotter:
         self.save_name = save_name
         self.data_index_to_label = {}
 
-    def _select_data(self, keys):
-        self.psData.select_data(keys, require_all_in_dir=False)
+    def _select_data(self, xkeys, ykeys):
+        print(ykeys)
+        self.psData.select_data(xkeys, require_all_in_dir=False)
+        self.psData.select_data(ykeys, require_all_in_dir=False, add_to_existing=True)
 
     def define_line_groups(self, line_groups=None):
         self.line_groups = line_groups
@@ -115,7 +117,7 @@ class boxPlotter:
         for skey in selected_keys:
             # print(skey, ydata)
             if isinstance(ydata, list) or isinstance(ydata, tuple):
-                all_test = all(ykey in str(skey) for ykey in ydata)
+                all_test = all(str(ykey) in str(skey) for ykey in ydata)
             else:
                 all_test = ydata in str(skey)
             if all_test:
@@ -142,7 +144,7 @@ class boxPlotter:
 
     def _test_key_in_key(self, test_key, key):
         if isinstance(test_key, (list, tuple)):
-            all_test = all(yk in str(key) for yk in test_key)
+            all_test = all(str(yk) in str(key) for yk in test_key)
         else:
             all_test = str(test_key) in str(key)
         return all_test
@@ -276,10 +278,9 @@ class boxPlotter:
     def plot_tornado_plot(
         self, xdata, ydata, axis_options=None, generate_plot=True, fig_options=None
     ):
-        keys = [xdata]
-        keys = keys + ydata
-        self._select_data(keys)
+        self._select_data(xdata, ydata)
         self.selected_data = self.psData.get_selected_data()
+        self.psData.display()
         print("sk", self.selected_data.keys())
         self.generate_groups_lines = self._get_group_options(
             self.selected_data.keys(), xdata, ydata
@@ -309,6 +310,7 @@ class boxPlotter:
 
         self.ylabels = []
         idx = len(self.boxes.keys()) - 1
+        print(self.boxes)
         for box_label, box in self.boxes.items():
             if box_label != self.ylabels:
                 self.ylabels.append(box_label)
@@ -319,7 +321,7 @@ class boxPlotter:
         self.axis_ticklabels["yticks"] = np.array(self.box_positions) - 0.5
 
     def generate_figure(self):
-
+        print(self.axis_options)
         self.fig.set_axis(**self.axis_options)
         self.fig.set_axis_ticklabels(**self.axis_ticklabels)
         self.fig.add_legend()

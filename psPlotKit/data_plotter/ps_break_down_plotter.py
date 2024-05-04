@@ -29,9 +29,12 @@ class breakDownPlotter:
         self.xdata_label = None
         self.ydata_label = None
         self.save_name = save_name
+        self.hatch_groups = {}
+        self.area_groups = {}
 
-    def _select_data(self, keys):
-        self.psData.select_data(keys, False)
+    def _select_data(self, xkeys, ykeys):
+        self.psData.select_data(xkeys, require_all_in_dir=False)
+        self.psData.select_data(ykeys, add_to_existing=True, require_all_in_dir=False)
 
     def define_hatch_groups(self, groups=None):
         self.hatch_groups = groups
@@ -109,7 +112,7 @@ class breakDownPlotter:
     def _get_ydata(self, selected_keys, ydata):
         ykey_data = []
         for skey in selected_keys:
-
+            print("skey", skey)
             if isinstance(ydata, list) or isinstance(ydata, tuple):
                 all_test = all(ykey in str(skey) for ykey in ydata)
             else:
@@ -154,8 +157,20 @@ class breakDownPlotter:
                     # if key not in self.line_indexes:
                     #     self.line_indexes[key] = {"idx": 0, "auto": True}
             for akey in self.area_groups:
+                _label = None
+                if isinstance(akey, dict):
+                    print(akey.items())
+                    akey, item = list(akey.items())[0]
+                    if isinstance(item, dict):
+                        if "label" in item:
+                            _label = item["label"]
+                        if "color" in item:
+                            color = item["color"]
+                    else:
+                        _label = item
                 if self.check_key_in_dir(skey, akey):
-                    _label = akey
+                    if _label is None:
+                        _label = akey
                     plot_label = _label
                     cur_line = {}
                     raw_ydata = self.selected_data[skey]
@@ -186,21 +201,37 @@ class breakDownPlotter:
                                 cur_line["label"] = plot_label
                                 self.plot_areas[_label] = cur_line
                     else:
-                        cur_line["color"] = self._get_color(akey)
+                        cur_line["color"] = self._get_color("no_groups")
                         cur_line["label"] = plot_label
-                        self.plot_areas[_label] = cur_line
-        # print("line_groups", self.line_groups)
-        print("plot_lines", self.plot_areas)
+                        self.plot_areas[akey] = cur_line
+        self.plot_order = []
+        for akey in self.area_groups[::-1]:
+            if isinstance(akey, dict):
+                akey, item = list(akey.items())[0]
+            for key in self.plot_areas.keys():
+                if akey in key:
+                    self.plot_order.append(key)
+
+        print("plot_lines", self.plot_order)
         print("hatch_groups", self.hatch_groups)
         # assert False
 
-    def plotbreakdown(self, xdata, ydata, axis_options=None, generate_plot=True):
+    def plotbreakdown(
+        self,
+        xdata,
+        ydata,
+        axis_options=None,
+        generate_figure=True,
+        legend_loc="upper left",
+        fig_options={},
+    ):
 
-        self._select_data([xdata, ydata])
+        self._select_data(xdata, ydata)
         self.selected_data = self.psData.get_selected_data()
         self.generate_groups_lines = self._get_group_options(
             self.selected_data.keys(), xdata, ydata
         )
+        self.fig_options = fig_options
         self.index = 0
         if axis_options is None:
             self.axis_options = {}
@@ -215,18 +246,23 @@ class breakDownPlotter:
                 self.ydata_label, self.yunit
             )  # all lines shold share units
         self.plot_imported_data()
-        if generate_plot:
-            self.generate_figure()
+        if generate_figure:
+            self.generate_figure(loc=legend_loc)
 
     def plot_imported_data(self):
-        self.fig = figureGenerator()
-        self.fig.init_figure()
+        if "fig_object" in self.fig_options:
+            self.fig = self.fig_options.get("fig_object")
+        else:
+            self.fig = figureGenerator()
+            self.fig.init_figure(**self.fig_options)
         plotted_legend = []
         for group, items in self.hatch_groups.items():
             self.fig.plot_area([], [], **items)
         old_data = 0
         current_data = None
-        for linelabel, line in self.plot_areas.items():
+
+        for linelabel in self.plot_order:
+            line = self.plot_areas[linelabel]
             if line.get("label") in plotted_legend:
                 line.pop("label")
             else:
@@ -237,12 +273,16 @@ class breakDownPlotter:
             else:
                 current_data = line["ydata"] + old_data
             line["ydata"] = current_data
+            if "ax_idx" in self.fig_options:
+                line["ax_idx"] = self.fig_options.get("ax_idx")
             self.fig.plot_area(**line)
             old_data = line["ydata"]
 
-    def generate_figure(self):
+    def generate_figure(self, loc="upper left"):
+        if "ax_idx" in self.fig_options:
+            self.axis_options["ax_idx"] = self.fig_options["ax_idx"]
         self.fig.set_axis(**self.axis_options)
-        self.fig.add_legend()
+        self.fig.add_legend(loc=loc)
         if self.save_name == None:
             save_name = "{} vs {}".format(self.xdata_label, self.ydata_label)
         else:

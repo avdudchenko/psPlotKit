@@ -33,6 +33,8 @@ class psCosting:
             "factor_total_investment": {},
             "factor_maintenance_labor_chemical": {},
             "factor_capital_annualization": {},
+            "capital_recovery_factor": {},
+            "maintenance_labor_chemical_factor": {},
             "electricity_cost": {},
             "TIC": {},
             "TPEC": {},
@@ -47,7 +49,11 @@ class psCosting:
         self.costed_groups = {}
         self.expected_units = {"CAPEX": [], "OPEX": []}
         for group, items in groups.items():
-            self.costed_groups[group] = {"CAPEX": {}, "OPEX": {}}
+            self.costed_groups[group] = {
+                "CAPEX": {},
+                "OPEX": {},
+                "block_name": items.get("block_name"),
+            }
             for ct in ["CAPEX", "OPEX"]:
                 if "units" in items:
                     if isinstance(items["units"], str):
@@ -98,24 +104,30 @@ class psCosting:
             sum_total = None
             for group, cost_breakdown in self.costed_groups.items():
                 capex = self.get_device_cost(
-                    cost_breakdown["CAPEX"],
-                    udir,
-                    "CAPEX",
+                    cost_breakdown["CAPEX"], udir, "CAPEX", cost_breakdown["block_name"]
                 )
                 opex = self.get_device_cost(
-                    cost_breakdown["OPEX"],
-                    udir,
-                    "OPEX",
+                    cost_breakdown["OPEX"], udir, "OPEX", cost_breakdown["block_name"]
                 )
                 if capex is not None and opex is not None:
-
-                    opex = (
-                        opex
-                        + capex * self.global_costs["factor_maintenance_labor_chemical"]
-                    )
-
-                capex = capex * self.global_costs["factor_capital_annualization"]
-
+                    if "factor_maintenance_labor_chemical" in self.global_costs:
+                        factor_maintenance_labor_chemical = self.global_costs[
+                            "factor_maintenance_labor_chemical"
+                        ]
+                    elif "maintenance_labor_chemical_factor" in self.global_costs:
+                        factor_maintenance_labor_chemical = self.global_costs[
+                            "maintenance_labor_chemical_factor"
+                        ]
+                    opex = opex + capex * factor_maintenance_labor_chemical
+                if "factor_capital_annualization" in self.global_costs:
+                    factor_capital_annualization = self.global_costs[
+                        "factor_capital_annualization"
+                    ]
+                elif "capital_recovery_factor" in self.global_costs:
+                    factor_capital_annualization = self.global_costs[
+                        "capital_recovery_factor"
+                    ]
+                capex = capex * factor_capital_annualization
                 total = capex + opex
                 lcapex = self.normalize_cost(capex)
                 lopex = self.normalize_cost(opex)
@@ -125,10 +137,7 @@ class psCosting:
                     sum_lpex = lopex
                     sum_lcapex = lcapex
                     sum_opex = opex
-                    sum_capex = (
-                        capex
-                        / self.global_costs["factor_capital_annualization"].magnitude
-                    )
+                    sum_capex = capex / factor_capital_annualization.magnitude
                     sum_total = total
                 else:
                     sum_ltotal = sum_ltotal + ltotal
@@ -136,9 +145,7 @@ class psCosting:
                     sum_lcapex = sum_lcapex + lcapex
                     sum_opex = sum_opex + opex
                     sum_capex = (
-                        sum_capex
-                        + capex
-                        / self.global_costs["factor_capital_annualization"].magnitude
+                        sum_capex + capex / factor_capital_annualization.magnitude
                     )
                     sum_total = total + sum_total
                 self.psDataManager.add_data(
@@ -237,59 +244,68 @@ class psCosting:
                 key.replace("{}.".format(self.default_costing_block), "")
             ] = data.udata
 
-    def get_device_cost(self, device_keys, udir, cost_type):
+    def get_device_cost(self, device_keys, udir, cost_type, block_name=None):
         data_sum = None
         udir = self.psDataManager._dir_to_tuple(udir)
         # print("import request", device_keys, cost_type)
+        # print(self.costed_devices)
         for device in device_keys:
             for fs_device in self.costed_devices:
                 if device == fs_device:
                     for d_key in self.costed_devices[fs_device][cost_type]:
-                        try:
-                            sdata = self.psDataManager.get_data(udir, d_key)
-                            if "USD" not in sdata.sunits:
-                                data = sdata.udata.rescale(qs.W)
-                                data = data * qs.year
-                                data = data.rescale(qs.kWh)
-                                data = data * self.global_costs["electricity_cost"]
-                                data = (
-                                    data.rescale(self.USD)
-                                    / qs.year
-                                    # * self.global_costs["utilization_factor"]
-                                )
-                                # print(data)
-                            elif "USD/year" in sdata.sunits and cost_type == "OPEX":
-                                data = (
-                                    sdata.udata
-                                    # * self.global_costs["utilization_factor"]
-                                )
-                            else:
-                                data = sdata.udata
-                            if cost_type == "OPEX":
-                                # make sure current d_key is not a fixed_opertaing_cost
-                                fixed_check = all(
-                                    [
-                                        key_option in d_key
-                                        for key_option in self.fixed_operating_cost_ref
-                                    ]
-                                )
-                                if fixed_check == False:
-                                    # print(d_key)
+                        get_data = True
+                        if block_name != None and block_name not in d_key:
+                            get_data = False
+                        if get_data:
+                            try:
+                                sdata = self.psDataManager.get_data(udir, d_key)
+                                if "USD" not in sdata.sunits:
+                                    data = sdata.udata.rescale(qs.W)
+                                    data = data * qs.year
+                                    data = data.rescale(qs.kWh)
+                                    data = data * self.global_costs["electricity_cost"]
                                     data = (
-                                        data * self.global_costs["utilization_factor"]
+                                        data.rescale(self.USD)
+                                        / qs.year
+                                        # * self.global_costs["utilization_factor"]
                                     )
-                            # else:
-                            #     print(d_key, data)
-                            # print(data)
-                            if data_sum is None:
-                                data_sum = data
-                            else:
-                                data_sum = data_sum + data
-                        except KeyError:
-                            pass
+                                    # print(data)
+                                elif "USD/year" in sdata.sunits and cost_type == "OPEX":
+                                    data = (
+                                        sdata.udata
+                                        # * self.global_costs["utilization_factor"]
+                                    )
+                                else:
+                                    data = sdata.udata
+                                if cost_type == "OPEX":
+                                    # make sure current d_key is not a fixed_opertaing_cost
+                                    fixed_check = all(
+                                        [
+                                            key_option in d_key
+                                            for key_option in self.fixed_operating_cost_ref
+                                        ]
+                                    )
+                                    if fixed_check == False:
+                                        # print(d_key)
+                                        data = (
+                                            data
+                                            * self.global_costs["utilization_factor"]
+                                        )
+                                # else:
+                                #     print(d_key, data)
+                                # print(data)
+                                if data_sum is None:
+                                    data_sum = data
+                                else:
+                                    data_sum = data_sum + data
+                            except KeyError:
+                                pass
 
         if data_sum is None:
-            data_sum = 0 * self.USD / qs.year
+            if cost_type == "OPEX":
+                data_sum = 0 * self.USD / qs.year
+            elif cost_type == "CAPEX":
+                data_sum = 0 * self.USD
         return data_sum
 
     def get_costing_block_data(self):

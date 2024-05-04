@@ -51,11 +51,15 @@ class psData:
         else:
             self.data_label = data_label
         self.sunits = self._convert_string_unit(import_units)
+        self.data_is_numbers = True
         if self._convert_iso_to_epoch:
             data_array = np.array(self._iso_to_epoch(data_array))
         if isinstance(data_array, list):
-            data_array = np.array(data_array, dtype=float)
-
+            try:
+                data_array = np.array(data_array, dtype=float)
+            except:
+                data_array = np.array(data_array, dtype=str)
+                self.data_is_numbers = False
         self.raw_data = data_array
         self.data = data_array
         # if feasible_indexes is None:
@@ -101,6 +105,7 @@ class psData:
         reduced_data = []
         for i, fidx in enumerate(idxs):
             if fidx == fidx:
+
                 dt = data[:, i]
                 reduced_data.append(dt[int(fidx)])
             else:
@@ -113,7 +118,8 @@ class psData:
         self.custom_units = {"USD": self.USD, "PPM": self.PPM}
 
     def _assign_units(self, manual_conversion=1):
-        self.data = self.data * manual_conversion
+        if self.data_is_numbers:
+            self.data = self.data * manual_conversion
         qsunits = self._get_qs_unit()
         self.udata = qs.Quantity(self.data[:], qsunits)
         self.uraw_data = qs.Quantity(self.raw_data[:], qsunits)
@@ -139,6 +145,7 @@ class psData:
     def _get_qs_unit(self):
         if self.sunits not in self.custom_units:
             try:
+                # print(self.sunits)
                 unit = qs.Quantity(1, self.sunits)
                 qsunits = self.sunits
             except LookupError:
@@ -183,15 +190,17 @@ class psData:
         if "°C" in units:
             units = units.replace(" °C", "*degC")
             _logger.debug("converted C to degC")
+        if "liter" in units:
+            units = units.replace("liter", "L")
+        if "sec" in units:
+            units = units.replace("sec", "s")
         return units
 
     def to_units(self, new_units):
         self.sunits = self._convert_string_unit(new_units)
         qsunits = self._get_qs_unit()
-        print(self.data_key, self.udata)
         self.udata = self.udata.rescale(qsunits)
         self.uraw_data = self.uraw_data.rescale(qsunits)
-        print(self.data_key, self.udata)
         self.data = self.udata.magnitude[:]
         self.raw_data = self.uraw_data.magnitude
         self.set_label()
@@ -209,3 +218,9 @@ class psData:
             datetime.datetime.fromisoformat(dt).timestamp() / 60 for dt in data
         ]
         return epoch_time
+
+    def get_json_dict(self):
+        data_dict = {}
+        data_dict["units"] = self.sunits
+        data_dict["values"] = self.data.tolist()
+        return data_dict

@@ -42,12 +42,15 @@ class linePlotter:
             return self.line_colors[label]
         else:
             idx = None
+            if isinstance(label, str):
+                label = [label]
             for key in label:
                 if key in self.line_indexes:
                     idx = self.line_indexes[key]["idx"]
-                    print(key, self.line_indexes[key])
+                    print("lk", key, self.line_indexes[key])
                     break
-            if idx == None:
+            print("idx", idx)
+            if idx == None or single_group == False:
                 if single_group:
                     auto_label = "single_group"
                 else:
@@ -74,6 +77,7 @@ class linePlotter:
                                     break
 
                 print(
+                    "color auto",
                     auto_label,
                     self.line_indexes[auto_label],
                     idx,
@@ -159,17 +163,19 @@ class linePlotter:
             opts = None
             key = None
             for key in self.line_groups:
-                if key in str(skey):
+                if str(key) in str(skey):
                     opts = self.line_groups[key]
                     if opts.get("label") == None:
                         opts["label"] = key
-                    if opts.get("color") == None:
+                    if opts.get("color") == None and opts.get("marker") == None:
                         opts["color"] = "black"
                     if opts.get("marker") == None:
                         opts["marker"] = "o"
                     if key not in self.line_indexes:
                         self.line_indexes[key] = {"idx": 0, "auto": True}
+                    print("line_indexes", self.line_indexes)
             for sk in skey:
+                print("sk", sk)
                 if isinstance(ydata, list) or isinstance(ydata, tuple):
                     all_test = all(ykey in str(skey) for ykey in ydata)
                 else:
@@ -220,12 +226,18 @@ class linePlotter:
 
                     if self.line_groups != {}:
                         for g_key in self.line_groups:
-                            if g_key in str(skey):
+                            if str(g_key) in str(skey):
 
-                                plot_label.replace(g_key, "")
-                                cur_line["color"] = self._get_color(
-                                    g_key, count_idx=_label
-                                )
+                                plot_label.replace(str(g_key), "")
+                                print(cur_line.get("color"), "curcolor")
+                                if (
+                                    cur_line.get("color") is None
+                                    and cur_line.get("color") != "black"
+                                ):
+                                    cur_line["color"] = self._get_color(
+                                        g_key, count_idx=_label
+                                    )
+                                    print("getting coor")
                                 _label = tuple([g_key, _label])
                     else:
                         cur_line["color"] = self._get_color(
@@ -239,10 +251,13 @@ class linePlotter:
         print("line_groups", self.line_groups)
         print("plot_lines", self.plot_lines)
 
-    def plot_line(self, xdata, ydata, axis_options=None, generate_plot=True):
+    def plot_line(
+        self, xdata, ydata, axis_options=None, fig_options={}, generate_plot=True
+    ):
 
         self._select_data([xdata, ydata])
         self.selected_data = self.psData.get_selected_data()
+        self.selected_data.display()
         self.generate_groups_lines = self._get_group_options(
             self.selected_data.keys(), xdata, ydata
         )
@@ -259,32 +274,44 @@ class linePlotter:
             self.axis_options["ylabel"] = self._get_axis_label(
                 self.ydata_label, self.yunit
             )  # all lines shold share units
-        self.plot_imported_data()
+        self.plot_imported_data(fig_options)
         if generate_plot:
             self.generate_figure()
 
-    def plot_imported_data(self):
-        self.fig = figureGenerator()
-        self.fig.init_figure()
+    def plot_imported_data(self, fig_options):
+        if "fig_object" in fig_options:
+            self.fig = fig_options.get("fig_object")
+        else:
+            self.fig = figureGenerator()
+
+            self.fig.init_figure(**fig_options)
         plotted_legend = []
+        print("gen linegroups", self.line_groups)
         for group, items in self.line_groups.items():
+            if "ax_idx" in fig_options:
+                items["ax_idx"] = fig_options.get("ax_idx")
+            if items.get("color") == None:
+                items["color"] = "black"
             self.fig.plot_line([], [], **items)
         for linelabel, line in self.plot_lines.items():
-
+            if "ax_idx" in fig_options:
+                line["ax_idx"] = fig_options.get("ax_idx")
             if line.get("label") in plotted_legend:
                 line.pop("label")
             else:
                 plotted_legend.append(line["label"])
+            print(line)
             self.fig.plot_line(**line)
 
-    def generate_figure(self):
+    def generate_figure(self, show_and_save=True):
         self.fig.set_axis(**self.axis_options)
-        self.fig.add_legend()
+        self.fig.add_legend(**self.axis_options)
         if self.save_name == None:
             save_name = "{} vs {}".format(self.xdata_label, self.ydata_label)
         else:
             save_name = "{} - {} vs {}".format(
                 self.save_name, self.xdata_label, self.ydata_label
             )
-        self.fig.save(self.save_location, save_name)
-        self.fig.show()
+        if show_and_save:
+            self.fig.save(self.save_location, save_name)
+            self.fig.show()
