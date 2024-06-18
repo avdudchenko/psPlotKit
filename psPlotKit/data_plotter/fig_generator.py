@@ -978,13 +978,13 @@ class figureGenerator:
             self.plotted_data.update({save_label: {"box_data": percentiles}})
 
     def build_map_data(self, x=None, y=None, z=None, x_uniqu=None, y_uniqu=None):
-        x = x.round(decimals=1)
-        y = y.round(decimals=3)
+        # x = x.round(decimals=1)
+        # y = y.round(decimals=3)
+        print(x.shape)
         if x_uniqu is None:
             x_uniqu = np.unique(x)
             y_uniqu = np.unique(y)
-        print(x_uniqu)
-        print(np.geomspace(1, 1000, 100))
+
         # x_uniqu = np.geomspace(1, 1000, 100)
         # print(x_uniqu, y_uniqu)
         # print(x_uniqu.size, y_uniqu.size)
@@ -999,6 +999,7 @@ class figureGenerator:
 
         print(x_uniqu, y_uniqu)
         for i, iz in enumerate(z):
+            # print(x[i])
             ix = np.where(abs(x[i] - np.array(x_uniqu)) < 1e-5)[0]
             iy = np.where(abs(y[i] - np.array(y_uniqu)) < 1e-5)[0]
             z_map[iy, ix] = iz
@@ -1230,6 +1231,7 @@ class figureGenerator:
         self.colorMaps["color_map"] = cm.get_cmap(
             self.colorMaps["color_map"], len(levels) - 1
         )
+        print(self.colorMaps["color_map"])
         return map_data
 
     def plot_map(
@@ -1384,15 +1386,15 @@ class figureGenerator:
         if text and map_data.size < 200:
             for r, row in enumerate(map_data):
                 for c, value in enumerate(row):
-                    if value < ((vmax - vmin) / 2 + vmin):
+                    if abs(value) < ((vmax - vmin) / 2 + vmin):
                         text_color = "white"
                     else:
                         text_color = "black"
                     if str(value) != "nan":
                         if sig_figs_text == "auto":
-                            if value >= 10:
+                            if abs(value) >= 10:
                                 sig_figs = auto_sig_10_inf
-                            elif value < 1:
+                            elif abs(value) < 1:
                                 sig_figs = auto_sig_0_1
                             else:
                                 sig_figs = auto_sig_1_10
@@ -1667,8 +1669,8 @@ class figureGenerator:
         xscale=None,
         yscale=None,
         format_ticks=True,
-        xformat="10",
-        yformat="10",
+        xformat="fixed",
+        yformat="fixed",
         set_aspect="auto",
         xaxiscolor="black",
         yaxiscolor="black",
@@ -2002,49 +2004,51 @@ class figureGenerator:
         if figure_description is not None:
             data.append([figure_description])
         if self.map_mode:
-            data.append(
-                [
-                    "Map data for {}".format(
-                        self.remove_math_text(self.plotted_data["zlabel"]),
-                    ),
-                    "",
-                ]
-            )
-            data.append(
-                [
-                    "First column is {}".format(
-                        self.remove_math_text(self.plotted_data["ylabel"])
-                    ),
-                ]
-            )
-            data.append(
-                [
-                    "First row is {}".format(
-                        self.remove_math_text(self.plotted_data["xlabel"])
-                    ),
-                ]
-            )
-            data.append(
-                [
-                    "Internal data is {}".format(
-                        self.remove_math_text(self.plotted_data["zlabel"])
-                    ),
-                ]
-            )
-            rows_label = [self.plotted_data["ylabel"], "|", "|", "v"]
-            # print(data)
-            data.append([""] + list(self.plotted_data["datax"]))
-            # print(
-            #     self.plotted_data["datax"].shape,
-            #     self.plotted_data["datay"].shape,
-            #     self.plotted_data["dataz"].shape,
-            # )
-            for ik, k in enumerate(self.plotted_data["datay"]):
-                try:
-                    lb = rows_label[ik]
-                except IndexError:
-                    lb = ""
-                data.append([k] + list(self.plotted_data["dataz"][ik]))
+            zlabel = self.plotted_data.get("zlabel")
+            if zlabel is not None:
+                data.append(
+                    [
+                        "Map data for {}".format(
+                            self.remove_math_text(zlabel),
+                        ),
+                        "",
+                    ]
+                )
+                data.append(
+                    [
+                        "First column is {}".format(
+                            self.remove_math_text(self.plotted_data["ylabel"])
+                        ),
+                    ]
+                )
+                data.append(
+                    [
+                        "First row is {}".format(
+                            self.remove_math_text(self.plotted_data["xlabel"])
+                        ),
+                    ]
+                )
+                data.append(
+                    [
+                        "Internal data is {}".format(
+                            self.remove_math_text(self.plotted_data["zlabel"])
+                        ),
+                    ]
+                )
+                rows_label = [self.plotted_data["ylabel"], "|", "|", "v"]
+                # print(data)
+                data.append([""] + list(self.plotted_data["datax"]))
+                # print(
+                #     self.plotted_data["datax"].shape,
+                #     self.plotted_data["datay"].shape,
+                #     self.plotted_data["dataz"].shape,
+                # )
+                for ik, k in enumerate(self.plotted_data["datay"]):
+                    try:
+                        lb = rows_label[ik]
+                    except IndexError:
+                        lb = ""
+                    data.append([k] + list(self.plotted_data["dataz"][ik]))
         elif self.box_mode:
             # print("box_mode", self.plotted_data)
             # data.append(["key", "low_val", "high_val"])

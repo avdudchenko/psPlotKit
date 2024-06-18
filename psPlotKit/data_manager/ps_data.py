@@ -52,6 +52,8 @@ class psData:
             self.data_label = data_label
         self.sunits = self._convert_string_unit(import_units)
         self.data_is_numbers = True
+        self._original_data = np.array(data_array).copy()
+        self._raw_data = self._original_data.copy()
         if self._convert_iso_to_epoch:
             data_array = np.array(self._iso_to_epoch(data_array))
         if isinstance(data_array, list):
@@ -60,8 +62,8 @@ class psData:
             except:
                 data_array = np.array(data_array, dtype=str)
                 self.data_is_numbers = False
-        self.raw_data = data_array
-        self.data = data_array
+        self.raw_data = data_array.copy()
+        self.data = data_array.copy()
         # if feasible_indexes is None:
         self.feasible_indexes = feasible_indexes
         self._assign_units()
@@ -85,14 +87,18 @@ class psData:
         if feasible_only:
             if self.raw_data.shape == self.feasible_indexes.shape:
                 self.data = self.raw_data.copy()[self.feasible_indexes]
+                self._raw_data = self._original_data.copy()[self.feasible_indexes]
                 self._assign_units()
         if user_filter is not None:
             if user_filter.filter_type == "2D":
                 self.data = self.raw_data.copy()
                 self.data = self._take_along(self.data, user_filter.data)
+                self._raw_data = self._original_data.copy()
+                self._raw_data = self._take_along(self._raw_data, user_filter.data)
                 self._assign_units()
             elif user_filter.filter_type == "1D":
                 self.data = self.raw_data.copy()[user_filter.data]
+                self._raw_data = self._original_data.copy()[user_filter.data]
                 self._assign_units()
             else:
                 _logger.debug(
@@ -140,6 +146,8 @@ class psData:
                     uf[i] = "$\$$"
 
             units = "/".join(uf)
+        if "dimensionless" in self.sunits:
+            units = "-"
         self.mpl_units = units
 
     def _get_qs_unit(self):
@@ -219,8 +227,13 @@ class psData:
         ]
         return epoch_time
 
-    def get_json_dict(self):
+    def get_json_dict(self, raw=False):
         data_dict = {}
         data_dict["units"] = self.sunits
-        data_dict["values"] = self.data.tolist()
+        if raw:
+            data_dict["units"] = "raw data"
+            data_dict["values"] = self._raw_data.tolist()
+        else:
+            data_dict["units"] = self.sunits
+            data_dict["values"] = self.data.tolist()
         return data_dict

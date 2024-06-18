@@ -84,7 +84,7 @@ class mapPlotter:
             xdata=self.xdata.data,
             ydata=self.ydata.data,
             zdata=self.zdata.data,
-            digitize_levels=self.zlevels,
+            # digitize_levels=self.zlevels,
             build_map=True,
             vmin=min(self.zlevels),
             vmax=max(self.zlevels),
