@@ -164,20 +164,36 @@ class psDataManager(dict):
 
     def _process_dir_data_keys(self, __dir_key, __key):
 
-        def _process_key(dkey):
-            if isinstance(dkey, str):
-                dkey = list([dkey])
-            return list(dkey)
+        # def _process_key(dkey):
+        #     if isinstance(dkey, str):
+        #         dkey = list([dkey])
+        #     return list(dkey)
+        # print('0',__dir_key,__key)
+        # __dir_key = _process_key(__dir_key)
+        # __key = _process_key(__key)
+        # print('1',__dir_key,__key)
+        # __data_dir = __dir_key[:]
+        # if len(__key) > 1:
+        #     __key = tuple(__key)
+        #     __data_dir.append(__key)
+        # elif len(__key) == 1:
+        #     __data_dir.append(__key[0])
 
-        __dir_key = _process_key(__dir_key)
-        __key = _process_key(__key)
-        __data_dir = __dir_key[:]
-        if len(__key) > 1:
-            __key = tuple(__key)
-            __data_dir.append(__key)
-        elif len(__key) == 1:
-            __data_dir.append(__key[0])
-        __data_dir = tuple(__data_dir)
+        # print('3',__data_dir)
+        # if isinstance(__dir_key,tuple):
+        #     print('dd',__dir_key[0])
+        #     if isinstance(__key,str):
+        #         __data_dir=tuple(tuple(__dir_key),__key)
+        #     else:
+        #         __data_dir=tuple(tuple(__dir_key),tuple(__key))
+        # elif isinstance(__dir_key,str) and isinstance(__key,str):
+        #     __data_dir = tuple((__dir_key,__key))
+        # elif isinstance(__dir_key,str) and isinstance(__key,tuple):
+        #     __data_dir = tuple(__data_dir)
+        __data_dir=tuple((__dir_key,__key))
+        # print(__data_dir)
+    
+        
         return __dir_key, __key, __data_dir
 
     def get_data(self, __dir_key, __key) -> None:
@@ -197,10 +213,9 @@ class psDataManager(dict):
             data.mask_data(self[reduced_dir])
         return data
 
-    def copy_dataset(self, source, destination):
+    def copy_dataset(self, source, directory, key):
         data = self[source]
-        ddir, dkey = destination[:-1], destination[-1]
-        self.add_data(ddir, dkey, copy.deepcopy(data))
+        self.add_data(directory, key, copy.deepcopy(data))
 
     def select_data(
         self,
@@ -208,7 +223,9 @@ class psDataManager(dict):
         require_all_in_dir=True,
         exact_keys=False,
         add_to_existing=False,
-    ) -> None:
+    ):
+        if isinstance(selected_keys,str):
+            selected_keys=[selected_keys]
         selected_dir_keys = self.select_dir_keys(
             selected_keys, require_all_in_dir, exact_keys
         )
@@ -245,7 +262,6 @@ class psDataManager(dict):
                             if str(key) == str(dl):
                                 num_keys_found += 1
                 else:
-                    # print(key, dkey, str(key) in str(dkey))
                     if str(key) in str(dkey):
                         num_keys_found += 1
             if len(selected_keys) == num_keys_found and require_all_in_dir:
