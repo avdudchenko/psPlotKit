@@ -168,32 +168,27 @@ class psDataManager(dict):
         #     if isinstance(dkey, str):
         #         dkey = list([dkey])
         #     return list(dkey)
-        # print('0',__dir_key,__key)
-        # __dir_key = _process_key(__dir_key)
-        # __key = _process_key(__key)
-        # print('1',__dir_key,__key)
-        # __data_dir = __dir_key[:]
-        # if len(__key) > 1:
-        #     __key = tuple(__key)
-        #     __data_dir.append(__key)
-        # elif len(__key) == 1:
-        #     __data_dir.append(__key[0])
+        if isinstance(__key, list):
+            if len(__key) == 1:
+                __key = __key[0]
+            else:
+                __key = tuple(__key)
+        # print(__dir_key)
+        if isinstance(__dir_key, list):
+            _temp_der_list = []
+            if len(__dir_key) == 1:
+                _temp_der_list.append(__dir_key[0])
+            elif len(__dir_key) > 1:
+                _temp_der_list = list(__dir_key)
+            _temp_der_list.append(__key)
+            __data_dir = tuple(_temp_der_list)
+        elif isinstance(__dir_key, str):
+            __data_dir = tuple((__dir_key, __key))
+        elif isinstance(__dir_key, tuple):
+            _temp_der_list = list(__dir_key)
+            _temp_der_list.append(__key)
+            __data_dir = tuple(_temp_der_list)
 
-        # print('3',__data_dir)
-        # if isinstance(__dir_key,tuple):
-        #     print('dd',__dir_key[0])
-        #     if isinstance(__key,str):
-        #         __data_dir=tuple(tuple(__dir_key),__key)
-        #     else:
-        #         __data_dir=tuple(tuple(__dir_key),tuple(__key))
-        # elif isinstance(__dir_key,str) and isinstance(__key,str):
-        #     __data_dir = tuple((__dir_key,__key))
-        # elif isinstance(__dir_key,str) and isinstance(__key,tuple):
-        #     __data_dir = tuple(__data_dir)
-        __data_dir=tuple((__dir_key,__key))
-        # print(__data_dir)
-    
-        
         return __dir_key, __key, __data_dir
 
     def get_data(self, __dir_key, __key) -> None:
@@ -224,8 +219,8 @@ class psDataManager(dict):
         exact_keys=False,
         add_to_existing=False,
     ):
-        if isinstance(selected_keys,str):
-            selected_keys=[selected_keys]
+        if isinstance(selected_keys, str):
+            selected_keys = [selected_keys]
         selected_dir_keys = self.select_dir_keys(
             selected_keys, require_all_in_dir, exact_keys
         )
@@ -521,6 +516,7 @@ class psDataManager(dict):
                         )
                     ukey = list(ukey)
                     for dkey in stack_keys:
+                        print(dkey, ukey)
                         ukey.remove(dkey)
                     if len(ukey) == 1:
                         ukey = ukey[0]

@@ -26,6 +26,7 @@ setup(
         "matplotlib",
         "pyyaml",
         "scipy",
+        "numpy<2.0.0",
     ],  # add any additional packages that
     # needs to be installed along with your package. Eg: 'caer'
     keywords=["python", "analysis_plot_kit"],

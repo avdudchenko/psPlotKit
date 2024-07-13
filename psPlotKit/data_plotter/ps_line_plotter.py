@@ -160,6 +160,7 @@ class linePlotter:
 
         print("line_groups", self.line_groups)
         for skey in self._get_ydata(selected_keys, ydata):
+            print("skey", skey)
             opts = None
             key = None
             for key in self.line_groups:
@@ -183,7 +184,8 @@ class linePlotter:
                 if all_test:
                     _label = None
                     for key in self.data_index_to_label:
-                        if key in skey:
+                        print(key, key in skey)
+                        if str(key) in str(skey):
                             _label = self.data_index_to_label[key]
                     if _label is None:
                         if isinstance(sk, tuple):

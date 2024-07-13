@@ -18,5 +18,6 @@ Requires-Dist: quantities
 Requires-Dist: matplotlib
 Requires-Dist: pyyaml
 Requires-Dist: scipy
+Requires-Dist: numpy<2.0.0
 
 tool kit for plotting analysis results 

@@ -17,6 +17,7 @@ from scipy.interpolate import (
     NearestNDInterpolator,
     # RBFInterpolator,
 )
+from matplotlib.colors import ListedColormap
 import math
 import copy
 from matplotlib import cm
@@ -87,7 +88,7 @@ class figureGenerator:
     def gen_colormap(
         self, num_samples=10, vmin=0, vmax=1, map_name="viridis", return_map=False
     ):
-        map_object = cm.get_cmap(map_name, num_samples)
+        map_object = matplotlib.colormaps.get_cmap(map_name)(num_samples)
         colors = map_object(list(range(num_samples)))
         self.colorMaps[map_name] = colors
         self.colormaps = map_name
@@ -999,12 +1000,14 @@ class figureGenerator:
 
         print(x_uniqu, y_uniqu)
         for i, iz in enumerate(z):
-            # print(x[i])
+            # print(x[i], y[i])
             ix = np.where(abs(x[i] - np.array(x_uniqu)) < 1e-5)[0]
             iy = np.where(abs(y[i] - np.array(y_uniqu)) < 1e-5)[0]
             z_map[iy, ix] = iz
+            print(ix, iy, iz, x[i], y[i])
             # if iz == iz:
             #   print(iz, ix, iy, x[i], y[i])
+        print(z_map)
 
         return z_map, x_uniqu, y_uniqu
 
@@ -1212,7 +1215,7 @@ class figureGenerator:
         cs.changed()
         return cs
 
-    def digitize_map(self, map_data, levels):
+    def digitize_map(self, map_data, levels, colors):
         print(levels)
         for i, lu in enumerate(levels[1:]):
             lb, ub = levels[i - 1], levels[i]
@@ -1227,11 +1230,28 @@ class figureGenerator:
                     idx = np.where((m < ub) & (m > lb))[0]
                     # print(idx)
                     m[idx] = average_level
-
-        self.colorMaps["color_map"] = cm.get_cmap(
-            self.colorMaps["color_map"], len(levels) - 1
-        )
-        print(self.colorMaps["color_map"])
+        if colors is None:
+            _colors = []
+            for l, _ in enumerate(levels):
+                _colors.append(
+                    matplotlib.colormaps.get_cmap(self.colorMaps["color_map"])(
+                        l / len(levels)
+                    )
+                )
+            print(colors)
+        else:
+            _colors = colors
+            # for c in colors:
+            #     if isinstance(c, str) and "#" in c:
+            #         c = c.strip("#")
+            #         _colors.append(tuple(int(c[i : i + 2], 16) for i in (0, 2, 4)))
+            #     else:
+            #         _colors.append(c)
+        print(_colors)
+        self.colorMaps["color_map"] = ListedColormap(_colors)  # len(levels))
+        # print(self.colorMaps["color_map"])
+        # assert False
+        print(map_data)
         return map_data
 
     def plot_map(
@@ -1265,6 +1285,7 @@ class figureGenerator:
         extend_colors=None,
         digitize=False,
         digitize_levels=None,
+        digitize_colors=None,
         **kwargs,
     ):
         # print(zoverlay, ydata, zdata)
@@ -1330,7 +1351,7 @@ class figureGenerator:
         # if fix_nans:
         #     map = self.fix_nan_in_map(np.unique(xdata), np.unique(ydata), map)
         if digitize_levels is not None:
-            self.digitize_map(map_data, digitize_levels)
+            self.digitize_map(map_data, digitize_levels, digitize_colors)
 
         if zscale == "log":
             norm = LogNorm(vmin=vmin, vmax=vmax)
@@ -1386,7 +1407,8 @@ class figureGenerator:
         if text and map_data.size < 200:
             for r, row in enumerate(map_data):
                 for c, value in enumerate(row):
-                    if abs(value) < ((vmax - vmin) / 2 + vmin):
+                    print(abs(value), ((vmax - vmin) / 2 + vmin))
+                    if value < ((vmax - vmin) / 2 + vmin):
                         text_color = "white"
                     else:
                         text_color = "black"
