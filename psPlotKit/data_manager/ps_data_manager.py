@@ -245,22 +245,36 @@ class psDataManager(dict):
         selected dir keys, otherwise return all"""
         dir_keys = []
         current_keys = list(self.keys())
+
+        def _key_dive(key, test_key):
+            if isinstance(key, list) or isinstance(key, tuple):
+                for k in key:
+                    result = _key_dive(k, test_key)
+                    if result:
+                        return result
+            if key == test_key:
+                return True
+            return False
+
         for dkey in current_keys:
             num_keys_found = 0
             for key in selected_keys:
                 if exact:
-                    if isinstance(dkey, str):
-                        if key == dkey:
-                            num_keys_found += 1
-                    else:
-                        for dl in dkey:
-                            if str(key) == str(dl):
-                                num_keys_found += 1
+                    result = _key_dive(dkey, key)
+                    if result:
+                        num_keys_found += 1
+                    # if isinstance(dkey, str):
+                    #     if key == dkey:
+                    #         num_keys_found += 1
+                    # else:
+                    #     for dl in dkey:
+                    #         if str(key) == str(dl):
+                    #             num_keys_found += 1
                 else:
                     if str(key) in str(dkey):
                         num_keys_found += 1
+            # assert False
             if len(selected_keys) == num_keys_found and require_all_in_dir:
-
                 dir_keys.append(dkey)
             elif require_all_in_dir == False and num_keys_found > 0:
                 # print(dkey, selected_keys)
@@ -417,6 +431,8 @@ class psDataManager(dict):
                 d = self[key].data
             return d
 
+        _function_dict = {}
+        _function = copy.copy(function)
         for key, data_keys in function_dict.items():
 
             if isinstance(data_keys["keys"], list):
@@ -429,15 +445,16 @@ class psDataManager(dict):
                 data = np.array(
                     get_dim_data(data_keys["keys"], to_units=data_keys.get("units"))
                 )
-            function_dict[key] = data
+            _function_dict[key] = np.array(data)
+            _function = _function.replace(key, f"np.array({key})")
         # if "np." in function:
-        function_dict["np"] = np
+        _function_dict["np"] = np
         _logger.info(
             "Evaluating function: {}, new dir and key {} {}".format(
                 function, directory, name
             )
         )
-        result_data = eval(function, function_dict)
+        result_data = eval(_function, _function_dict)
         # if isinstance(directory, (tuple, list)):
         #     directory = [directory]
         print(result_data)
