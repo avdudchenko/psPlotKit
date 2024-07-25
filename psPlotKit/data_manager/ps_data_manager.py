@@ -446,7 +446,7 @@ class psDataManager(dict):
                     get_dim_data(data_keys["keys"], to_units=data_keys.get("units"))
                 )
             _function_dict[key] = np.array(data)
-            _function = _function.replace(key, f"np.array({key})")
+            # _function = _function.replace(key, f"np.array({key})")
         # if "np." in function:
         _function_dict["np"] = np
         _logger.info(
