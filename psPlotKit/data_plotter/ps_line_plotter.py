@@ -22,8 +22,9 @@ class linePlotter:
         self.save_name = save_name
         self.data_index_to_label = {}
 
-    def _select_data(self, keys):
-        self.psData.select_data(keys, require_all_in_dir=False)
+    def _select_data(self, xdata, ydata):
+        self.psData.select_data(xdata, require_all_in_dir=False)
+        self.psData.select_data(ydata, require_all_in_dir=False, add_to_existing=True)
 
     def define_line_groups(self, line_groups=None):
         self.line_groups = line_groups
@@ -257,7 +258,7 @@ class linePlotter:
         self, xdata, ydata, axis_options=None, fig_options={}, generate_plot=True
     ):
 
-        self._select_data([xdata, ydata])
+        self._select_data(xdata, ydata)
         self.selected_data = self.psData.get_selected_data()
         self.selected_data.display()
         self.generate_groups_lines = self._get_group_options(

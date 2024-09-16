@@ -92,9 +92,18 @@ class psData:
         if user_filter is not None:
             if user_filter.filter_type == "2D":
                 self.data = self.raw_data.copy()
-                self.data = self._take_along(self.data, user_filter.data)
+                print(self.data_key)
+                print(self.data_type)
+                try:
+                    self.data = self._take_along(self.data, user_filter.data)
+                except:
+                    pass
+
                 self._raw_data = self._original_data.copy()
-                self._raw_data = self._take_along(self._raw_data, user_filter.data)
+                try:
+                    self._raw_data = self._take_along(self._raw_data, user_filter.data)
+                except:
+                    pass
                 self._assign_units()
             elif user_filter.filter_type == "1D":
                 self.data = self.raw_data.copy()[user_filter.data]

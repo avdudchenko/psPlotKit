@@ -64,6 +64,7 @@ class breakDownPlotter:
                     idx = 0
                     self.line_indexes[auto_label] = {"idx": 0}
             if isinstance(idx, int):
+                print(idx, self.line_colors)
                 color = self.line_colors[idx]
             else:
                 color = idx
@@ -228,6 +229,7 @@ class breakDownPlotter:
 
         self._select_data(xdata, ydata)
         self.selected_data = self.psData.get_selected_data()
+        self.selected_data.display()
         self.generate_groups_lines = self._get_group_options(
             self.selected_data.keys(), xdata, ydata
         )
