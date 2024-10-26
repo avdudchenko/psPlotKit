@@ -455,7 +455,7 @@ class psDataImport:
                 if "units" in self.raw_data_file[data_key]:
                     units = self.raw_data_file[data_key]["units"]
                 else:
-                    _logger.warning(f"No units for {data_key}")
+                    _logger.info(f"No units for {data_key}")
                     units = "dimensionless"
             else:
                 if "value" in self.raw_data_file[data_type][data_key]:
@@ -467,7 +467,7 @@ class psDataImport:
                 if "units" in self.raw_data_file[data_type][data_key]:
                     units = self.raw_data_file[data_type][data_key]["units"]
                 else:
-                    _logger.warning(f"No units for {data_key}")
+                    _logger.info(f"No units for {data_key}")
                     units = "dimensionless"
 
             return data, units

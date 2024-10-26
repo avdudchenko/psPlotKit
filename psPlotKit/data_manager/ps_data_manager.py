@@ -32,7 +32,7 @@ class psDataManager(dict):
             else:
                 for df in data_files:
                     if isinstance(df, str):
-                        self.psDataImportInstances.append(psDataImport(data_files))
+                        self.psDataImportInstances.append(psDataImport(df))
                     else:
                         directory = df["return_directory"]
                         file_loc = df["file"]

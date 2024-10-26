@@ -184,10 +184,22 @@ class linePlotter:
                     all_test = ydata in str(sk)
                 if all_test:
                     _label = None
-                    for key in self.data_index_to_label:
+
+                    cur_line = {}
+
+                    for key, item in self.data_index_to_label.items():
                         print(key, key in skey)
                         if str(key) in str(skey):
-                            _label = self.data_index_to_label[key]
+                            if isinstance(item, dict):
+                                _label = item["label"]
+                                if item.get("marker") is not None:
+                                    cur_line["marker"] = item.get("marker")
+                                if item.get("markersize") is not None:
+                                    cur_line["markersize"] = item.get("markersize")
+                                if item.get("color") is not None:
+                                    cur_line["color"] = item.get("color")
+                            else:
+                                _label = item
                     if _label is None:
                         if isinstance(sk, tuple):
                             _label = list(sk)[:]
@@ -207,9 +219,6 @@ class linePlotter:
                             _label = sk
 
                     plot_label = _label
-                    cur_line = {}
-
-                    cur_line = {}
                     raw_ydata = self.selected_data[skey]
                     raw_xdata = self.selected_data[self._replace_key(skey, xdata)]
                     cur_line["ydata"] = raw_ydata.data
