@@ -65,7 +65,7 @@ if __name__ == "__main__":
                 "yticks": [0, 0.5, 1.0, 1.5, 2.0],
                 "xticks": xticks,
             },
-            generate_plot=False,
+            generate_figure=False,
         )
 
         num_stages = costing_data[("stacked_data", "number_of_stages")].data

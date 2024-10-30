@@ -206,7 +206,8 @@ class breakDownPlotter:
                         cur_line["label"] = plot_label
                         self.plot_areas[akey] = cur_line
         self.plot_order = []
-        for akey in self.area_groups[::-1]:
+        print("self.area_groups", self.area_groups)
+        for akey in self.area_groups:
             if isinstance(akey, dict):
                 akey, item = list(akey.items())[0]
             for key in self.plot_areas.keys():
