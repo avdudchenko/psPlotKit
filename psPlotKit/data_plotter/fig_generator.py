@@ -978,9 +978,18 @@ class figureGenerator:
         if save_label is not None:
             self.plotted_data.update({save_label: {"box_data": percentiles}})
 
-    def build_map_data(self, x=None, y=None, z=None, x_uniqu=None, y_uniqu=None):
-        # x = x.round(decimals=1)
-        # y = y.round(decimals=3)
+    def build_map_data(
+        self,
+        x=None,
+        y=None,
+        z=None,
+        x_uniqu=None,
+        y_uniqu=None,
+        x_decimals=8,
+        y_decimals=8,
+    ):
+        x = x.round(decimals=x_decimals)
+        y = y.round(decimals=y_decimals)
         print(x.shape)
         if x_uniqu is None:
             x_uniqu = np.unique(x)
@@ -1286,13 +1295,21 @@ class figureGenerator:
         digitize=False,
         digitize_levels=None,
         digitize_colors=None,
+        unique_x_decimals=5,
+        unique_y_decimals=5,
         **kwargs,
     ):
         # print(zoverlay, ydata, zdata)
         self.map_mode = True
         datax, datay = None, None
         if build_map:
-            map_data, datax, datay = self.build_map_data(xdata, ydata, zdata)
+            map_data, datax, datay = self.build_map_data(
+                xdata,
+                ydata,
+                zdata,
+                x_decimals=unique_x_decimals,
+                y_decimals=unique_y_decimals,
+            )
 
             # print("map", map_data)
             # print("x", datax)
@@ -1534,12 +1551,12 @@ class figureGenerator:
                     offset_y = 0.5
 
                 ticks = self.map_func_x(xticklabels)
-
+                print(offset_x, ticks[-1], ticks[-1] + offset_y)
                 self.get_axis(ax_idx).set_xlim(offset_x, ticks[-1] + offset_y)
                 # offset = 0.5 / self.map_x_width  # / 2
                 # print(offset)
                 # print(xticklabels)
-                print(ticks)
+                print("xticks", ticks)
                 self.get_axis(ax_idx).set_xticks(ticks)
                 if xscale == "log":
                     minor_ticks = self.gen_minor_ticks(xticklabels)
