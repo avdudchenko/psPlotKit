@@ -262,9 +262,8 @@ class psDataImport:
     def get_selected_directories(self, directory_keys):
         t = time.time()
         selected_directories = []
-
         if directory_keys is None:
-            # _logger.info("Searching in all directories")
+            _logger.info("Searching in all directories")
             return self.directories
         else:
             for d in self.directories:
@@ -327,8 +326,7 @@ class psDataImport:
         selected_directories = self.get_selected_directories(directories)
         # print(self.file_index)
         for directory in selected_directories:
-            # print(directory, self.file_index[directory])
-            unique_labels = self.file_index[directory]["unique_directory"]
+            unique_labels = directory
             # print(unique_labels)
             for dkl in data_key_list:
                 if isinstance(dkl, dict):
@@ -456,6 +454,7 @@ class psDataImport:
                     units = self.raw_data_file[data_key]["units"]
                 else:
                     _logger.info(f"No units for {data_key}")
+                    # _logger.warning(f"No units for {data_key}")
                     units = "dimensionless"
             else:
                 if "value" in self.raw_data_file[data_type][data_key]:
@@ -467,7 +466,7 @@ class psDataImport:
                 if "units" in self.raw_data_file[data_type][data_key]:
                     units = self.raw_data_file[data_type][data_key]["units"]
                 else:
-                    _logger.info(f"No units for {data_key}")
+                    # _logger.warning(f"No units for {data_key}")
                     units = "dimensionless"
 
             return data, units
@@ -493,17 +492,20 @@ class psDataImport:
             _logger.debug("_get_data_set_auto took: {}".format(time.time() - t))
             t = time.time()
             idx, idx_str = self.get_key_indexes(data_key)
-            data_object = psData(
-                data_key,
-                data_type,
-                result,
-                units,
-                self.get_feasible_idxs(data=result),
-                **data_object_options,
-            )
-            data_object.key_index = idx
-            data_object.key_index_str = idx_str
-            return data_object
+            try:
+                data_object = psData(
+                    data_key,
+                    data_type,
+                    result,
+                    units,
+                    self.get_feasible_idxs(data=result),
+                    **data_object_options,
+                )
+                data_object.key_index = idx
+                data_object.key_index_str = idx_str
+                return data_object
+            except RuntimeError:
+                return None
         return None
 
     def _get_nearest_key(self, directory, data_key, exact_key):

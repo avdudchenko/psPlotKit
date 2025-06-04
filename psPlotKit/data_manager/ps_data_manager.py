@@ -5,6 +5,7 @@ from psPlotKit.data_manager.ps_data import psData
 from psPlotKit.data_manager.data_importer import psDataImport
 from psPlotKit.data_manager.ps_costing_tool import psCosting
 import copy
+import yaml
 
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
@@ -327,7 +328,6 @@ class psDataManager(dict):
                 base_skey.remove(key)
                 norm_base_skey = base_skey[:]
                 norm_base_skey.append(self.normalized_data)
-                # print(norm_base_skey, key)
                 self.add_data(
                     norm_base_skey,
                     key,
@@ -720,3 +720,109 @@ class psDataManager(dict):
             # _logger.info("Added data to dirs {}".format(new_dirs))
             # _logger.info("Created new data keys {}".format(new_keys))
         self.mask_data = mask_data
+
+    def get_diff(
+        self,
+        key,
+        return_absolute=False,
+        return_relative=True,
+        diff_loc="differential_idx",
+        diff_key="differential_idx",
+        nom_loc="nominal_idx",
+        nom_key="nominal_idx",
+        filter_nans=True,
+        data_key_list=None,
+        directories=None,
+        exact_keys=False,
+        num_keys=None,
+        match_accuracy=0.9,
+    ):
+        
+        for instance in self.psDataImportInstances:
+            instance.get_data(
+                data_key_list=data_key_list,
+                directories=directories,
+                num_keys=num_keys,
+                exact_keys=exact_keys,
+                match_accuracy=match_accuracy,
+                psDataManager=self,
+            )
+
+            sweep_reference_raw = instance._get_data_set(
+                nom_key,
+                main_loc=nom_loc,
+                sub_key="value",
+            )
+
+            sweep_reference = np.array(
+                sweep_reference_raw[sweep_reference_raw == sweep_reference_raw], dtype=int
+            )
+
+            diff_reference_raw = instance._get_data_set(
+                diff_key,
+                main_loc=diff_loc,
+                sub_key="value",
+            )
+
+            absolute_data = instance._get_data_set(
+                key,
+                main_loc='outputs',
+                sub_key="value",
+            )
+            
+            delta_result = np.zeros(diff_reference_raw.shape) * np.nan
+
+            for i in sweep_reference:
+                sweep_idx = np.where(i == sweep_reference_raw)[0][0]
+                diff_idx = np.where(i == diff_reference_raw)[0]  # [0]
+                if return_absolute:
+                    delta_result[diff_idx] = (
+                        absolute_data[diff_idx] - absolute_data[sweep_idx]
+                    )
+                elif return_relative:
+                    # NOTE This assumes a decrease is a good this. Which works for LCOW, but may not work for all data.
+                    delta_result[diff_idx] = (
+                        (absolute_data[sweep_idx] - absolute_data[diff_idx])
+                        / absolute_data[sweep_idx]
+                        * 100
+                    )
+                else:
+                    # NOTE If an increase is a good thing, then this is correct. Regardless, this relative change is difficult to handle and VOI will be forced positive in get_voi
+                    delta_result[diff_idx] = (
+                        (absolute_data[diff_idx] - absolute_data[sweep_idx])
+                        / absolute_data[diff_idx]
+                        * 100
+                    )
+
+            if filter_nans:
+                return delta_result[delta_result == delta_result]
+            else:
+                return delta_result
+
+    def get_voi(self, yaml_file = None):
+        '''
+        Calculate the Value of Information (VOI) based on LCOW and performance parameters from a YAML file.
+        This can be done better but this is a quick and dirty implementation.
+        '''
+        yaml_file = yaml.safe_load(open(yaml_file, "r"))
+
+        # Get the top-level key from the YAML file
+        tree_top = list(yaml_file.keys())[0]
+        # Get the list of sweep parameters from the YAML file
+        sweeps = list(yaml_file[tree_top]['diff_param_loop'].keys())[:-1]
+
+        results_dict = {}
+        for sweep in sweeps:
+            results_dict[sweep] = {}
+            param = yaml_file[tree_top]['diff_param_loop'][sweep]['param']
+            del_lcow = self.get_diff('fs.costing.LCOW', directories=sweep, return_relative=True)
+            del_performance = self.get_diff(param, directories=sweep, return_relative=False, return_absolute=False)
+            voi = del_lcow / del_performance
+            if np.all(voi < 0):
+                voi = np.abs(voi)
+            results_dict[sweep]['fs.costing.LCOW'] = del_lcow
+            results_dict[sweep][param] = del_performance
+            results_dict[sweep]['VOI'] = voi
+
+        return results_dict
+

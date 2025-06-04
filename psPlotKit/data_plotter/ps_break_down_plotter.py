@@ -64,8 +64,7 @@ class breakDownPlotter:
                     idx = 0
                     self.line_indexes[auto_label] = {"idx": 0}
             if isinstance(idx, int):
-                print(idx, self.line_colors)
-                color = self.line_colors[idx]
+                color = self.line_colors[(idx%len(self.line_colors))]
             else:
                 color = idx
             return color
@@ -225,6 +224,7 @@ class breakDownPlotter:
         axis_options=None,
         generate_figure=True,
         legend_loc="upper left",
+        legend_cols = 2,
         fig_options={},
     ):
 
@@ -250,7 +250,7 @@ class breakDownPlotter:
             )  # all lines shold share units
         self.plot_imported_data()
         if generate_figure:
-            self.generate_figure(loc=legend_loc)
+            self.generate_figure(loc=legend_loc, cols=legend_cols)
 
     def plot_imported_data(self):
         if "fig_object" in self.fig_options:
@@ -281,11 +281,11 @@ class breakDownPlotter:
             self.fig.plot_area(**line)
             old_data = line["ydata"]
 
-    def generate_figure(self, loc="upper left"):
+    def generate_figure(self, loc="upper left", cols=2):
         if "ax_idx" in self.fig_options:
             self.axis_options["ax_idx"] = self.fig_options["ax_idx"]
         self.fig.set_axis(**self.axis_options)
-        self.fig.add_legend(loc=loc)
+        self.fig.add_legend(loc=loc,ncol=cols)
         if self.save_name == None:
             save_name = "{} vs {}".format(self.xdata_label, self.ydata_label)
         else:

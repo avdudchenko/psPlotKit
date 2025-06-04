@@ -1952,7 +1952,6 @@ class waterTAP_data_collator:
         )
         cost_results = {}
         for group_key, item in cost_keys["cost_groups"].items():
-            # #print(group_key)
             if isinstance(item, str):
                 data = self.get_costs(item)
                 cost_results[group_key] = data
@@ -1964,7 +1963,6 @@ class waterTAP_data_collator:
                             if k is None:
                                 cost_results[group_key][item_key] = [0] * qs.USD
                             else:
-                                # #print("k", k, item[item_key])
                                 if isinstance(k, str):
                                     data = self.get_costs(k)
                                 elif isinstance(k, dict):
@@ -1978,8 +1976,6 @@ class waterTAP_data_collator:
                                     cost_results[group_key][item_key] += data
 
                 if include_indirects:
-                    # #print(cost_results[group_key]["CAPEX"])
-                    # ass
                     cost_results[group_key]["CAPEX"] = (
                         cost_results[group_key].get("CAPEX", 0 * qs.USD)
                         * self.default_costing_params["factor_total_investment"]
@@ -2001,10 +1997,7 @@ class waterTAP_data_collator:
                 OPEX = cost_results[group_key]["OPEX"] / self.total_flow
                 OPEX = OPEX.rescale(self.base_cost_unit)
                 cost_results[group_key]["OPEX"] = OPEX
-                # print(group_key, CAPEX, OPEX)
                 cost_results[group_key]["total"] = OPEX + CAPEX
-                # print(cost_results[group_key]["total"])
-                # assert False
 
         self.auto_gen_dict["cost_options"]["total"] = None
 
