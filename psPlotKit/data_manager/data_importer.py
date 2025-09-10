@@ -212,6 +212,7 @@ class psDataImport:
                         d, self.file_index[d]["unique_directory"]
                     )
                 )
+        print(self.directories, self.file_index)
         for cl in clean_up:
             self.directories.remove(cl)
             del self.file_index[cl]
@@ -324,9 +325,9 @@ class psDataImport:
             raise TypeError("Data key list must be type of list")
 
         selected_directories = self.get_selected_directories(directories)
-        # print(self.file_index)
         for directory in selected_directories:
-            unique_labels = directory
+
+            unique_labels = self.file_index[directory]["unique_directory"]
             # print(unique_labels)
             for dkl in data_key_list:
                 if isinstance(dkl, dict):
@@ -370,7 +371,6 @@ class psDataImport:
                                 return_dir = idx + return_dir
                             if len(_return_key) == 1:
                                 return_dir = idx[0]
-                            # print(return_dir, _return_key)
                             data.set_label(_return_key)
                             psDataManager.add_data(return_dir, _return_key, data)
         _logger.info("Done importing data in {} seconds!".format(time.time() - ts))

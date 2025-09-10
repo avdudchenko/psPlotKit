@@ -64,7 +64,7 @@ class breakDownPlotter:
                     idx = 0
                     self.line_indexes[auto_label] = {"idx": 0}
             if isinstance(idx, int):
-                color = self.line_colors[(idx%len(self.line_colors))]
+                color = self.line_colors[(idx % len(self.line_colors))]
             else:
                 color = idx
             return color
@@ -143,6 +143,7 @@ class breakDownPlotter:
         for skey in self._get_ydata(selected_keys, ydata):
             opts = None
             key = None
+            color = None
             for i, key in enumerate(self.hatch_groups):
                 if key in str(skey):
                     opts = self.hatch_groups[key]
@@ -197,11 +198,15 @@ class breakDownPlotter:
 
                                 _label = tuple([h_key, akey])
                                 plot_label.replace(h_key, "")
-                                cur_line["color"] = self._get_color(h_key)
+                                if color is None:
+                                    color = self._get_color(h_key)
+                                cur_line["color"] = color
                                 cur_line["label"] = plot_label
                                 self.plot_areas[_label] = cur_line
                     else:
-                        cur_line["color"] = self._get_color("no_groups")
+                        if color is None:
+                            color = self._get_color("no_groups")
+                        cur_line["color"] = color
                         cur_line["label"] = plot_label
                         self.plot_areas[akey] = cur_line
         self.plot_order = []
@@ -224,7 +229,7 @@ class breakDownPlotter:
         axis_options=None,
         generate_figure=True,
         legend_loc="upper left",
-        legend_cols = 2,
+        legend_cols=2,
         fig_options={},
     ):
 
@@ -285,7 +290,7 @@ class breakDownPlotter:
         if "ax_idx" in self.fig_options:
             self.axis_options["ax_idx"] = self.fig_options["ax_idx"]
         self.fig.set_axis(**self.axis_options)
-        self.fig.add_legend(loc=loc,ncol=cols)
+        self.fig.add_legend(loc=loc, ncol=cols)
         if self.save_name == None:
             save_name = "{} vs {}".format(self.xdata_label, self.ydata_label)
         else:

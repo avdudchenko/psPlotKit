@@ -81,8 +81,8 @@ class psCosting:
         self.psDataManager.load_data(self.costing_block_keys, exact_keys=True)
         self.unique_directory_keys = self.psDataManager.directory_keys
         # print(self.unique_directory_keys)
-        for key in self.psDataManager.keys():
-            print(key)
+        # for key in self.psDataManager.keys():
+        #     print(key)
         self.calculate_costs()
 
     def normalize_cost(self, cost):
@@ -102,6 +102,7 @@ class psCosting:
             sum_opex = None
             sum_capex = None
             sum_total = None
+            
             for group, cost_breakdown in self.costed_groups.items():
                 capex = self.get_device_cost(
                     cost_breakdown["CAPEX"], udir, "CAPEX", cost_breakdown["block_name"]
@@ -109,6 +110,8 @@ class psCosting:
                 opex = self.get_device_cost(
                     cost_breakdown["OPEX"], udir, "OPEX", cost_breakdown["block_name"]
                 )
+                # if 'HPRO' in udir:
+                #print(udir, group, "CAPEX", capex, "OPEX", opex)
                 if capex is not None and opex is not None:
                     if "factor_maintenance_labor_chemical" in self.global_costs:
                         factor_maintenance_labor_chemical = self.global_costs[
@@ -215,9 +218,7 @@ class psCosting:
                         data_label="LCOW",
                     ),
                 )
-            # print("OPEX", sum_opex)
-            # print("CAPEX", sum_capex)
-            # print("Total", sum_total)
+
             if len(sum_ltotal[sum_lcapex == sum_lcapex]) > 1:
                 error = np.nanmax(np.abs(self.global_costs["LCOW"] - sum_ltotal)) > 0.01
                 if error:
@@ -244,19 +245,43 @@ class psCosting:
                 key.replace("{}.".format(self.default_costing_block), "")
             ] = data.udata
 
+    def check_key_block_in_key(self, block, test_key, d_key):
+        d_split = d_key.split(".")
+        for i, sub_key in enumerate(d_split[:-1]):
+            if block == sub_key and sub_key != test_key:
+                return True
+            elif sub_key == test_key:
+                if f"{block}.{test_key}" == f"{sub_key}.{d_split[i+1]}":
+                    # print(block, sub_key, d_key, test_key)
+                    return True
+                else:
+                    print(f"{block}.{test_key}", f"{sub_key}.{d_split[i+1]}")
+        return False
+
     def get_device_cost(self, device_keys, udir, cost_type, block_name=None):
         data_sum = None
         udir = self.psDataManager._dir_to_tuple(udir)
         # print("import request", device_keys, cost_type)
-        # print(self.costed_devices)
+        # print(device_keys, self.costed_devices)
+        # assert False
         for device in device_keys:
+            if isinstance(device_keys, dict):
+                block_name = device_keys.get(device,None)
             for fs_device in self.costed_devices:
                 if device == fs_device:
                     for d_key in self.costed_devices[fs_device][cost_type]:
                         get_data = True
-                        if block_name != None and block_name not in d_key:
+                        if (
+                            block_name != None
+                            and self.check_key_block_in_key(block_name, device, d_key) == False
+                        ):
+                            # print(
+                            #     "Block name {} not in key {}".format(block_name, d_key)
+                            # )
                             get_data = False
+
                         if get_data:
+                            # print(block_name,fs_device, d_key)
                             try:
                                 sdata = self.psDataManager.get_data(udir, d_key)
                                 if "USD" not in sdata.sunits:
@@ -286,7 +311,7 @@ class psCosting:
                                         ]
                                     )
                                     if fixed_check == False:
-                                        # print(d_key)
+                                        #print(d_key)
                                         data = (
                                             data
                                             * self.global_costs["utilization_factor"]
@@ -306,6 +331,8 @@ class psCosting:
                 data_sum = 0 * self.USD / qs.year
             elif cost_type == "CAPEX":
                 data_sum = 0 * self.USD
+            # print("cost import error for device {}".format(device_keys))
+        # assert False
         return data_sum
 
     def get_costing_block_data(self):

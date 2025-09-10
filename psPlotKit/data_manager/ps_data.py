@@ -17,7 +17,7 @@ class psData:
         data_key,
         data_type,
         data_array,
-        import_units,
+        import_units="dimensionless",
         feasible_indexes=None,
         units=None,
         assign_units=None,
@@ -92,8 +92,6 @@ class psData:
         if user_filter is not None:
             if user_filter.filter_type == "2D":
                 self.data = self.raw_data.copy()
-                print(self.data_key)
-                print(self.data_type)
                 try:
                     self.data = self._take_along(self.data, user_filter.data)
                 except:
@@ -212,6 +210,10 @@ class psData:
         if "sec" in units:
             units = units.replace("sec", "s")
         return units
+
+    def set_data(self, data):
+        self.data = data
+        self.raw_data = data
 
     def to_units(self, new_units):
         self.sunits = self._convert_string_unit(new_units)
