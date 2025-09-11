@@ -994,30 +994,25 @@ class figureGenerator:
         if x_uniqu is None:
             x_uniqu = np.unique(x)
             y_uniqu = np.unique(y)
-
-        # x_uniqu = np.geomspace(1, 1000, 100)
-        # print(x_uniqu, y_uniqu)
-        # print(x_uniqu.size, y_uniqu.size)
-        # assert False
         z_map = np.empty((y_uniqu.shape[0], x_uniqu.shape[0]))
         z_map[:] = np.nan
-        # print(np.array(x_uniqu))
-        # print(np.array(y_uniqu))
-        # print(z)
+
         xdata = []
         ydata = []
-
         print(x_uniqu, y_uniqu)
-        for i, iz in enumerate(z):
-            # print(x[i], y[i])
-            ix = np.where(abs(x[i] - np.array(x_uniqu)) < 1e-5)[0]
-            iy = np.where(abs(y[i] - np.array(y_uniqu)) < 1e-5)[0]
-            z_map[iy, ix] = iz
-            print(ix, iy, iz, x[i], y[i])
-            # if iz == iz:
-            #   print(iz, ix, iy, x[i], y[i])
+        z = np.array(z)
+        print(z.ndim, y.ndim, x.ndim)
+        if z.ndim == 1:
+            for i, iz in enumerate(z):
+                print(x[i], y[i])
+                ix = np.where(abs(x[i] - np.array(x_uniqu)) < 1e-5)[0]
+                iy = np.where(abs(y[i] - np.array(y_uniqu)) < 1e-5)[0]
+                z_map[iy, ix] = iz
+                print(ix, iy, iz, x[i], y[i])
+        else:
+            z_map = z
         print(z_map)
-
+        print(x_uniqu, y_uniqu)
         return z_map, x_uniqu, y_uniqu
 
     def fix_nan_in_map(self, input_map):
@@ -1227,17 +1222,19 @@ class figureGenerator:
     def digitize_map(self, map_data, levels, colors):
         print(levels)
         for i, lu in enumerate(levels[1:]):
-            lb, ub = levels[i - 1], levels[i]
-            average_level = levels[i - 1] * 0.5 + levels[i] * 0.5
+            lb, ub = levels[i], levels[i + 1]
+            average_level = i  # levels[i] * 0.5 + levels[i + 1] * 0.5
             # print(len(map_data.shape))
             if len(map_data.shape) == 1:
                 idx = np.where((map_data < ub) & (map_data > lb))[0]
                 # print(idx)
+                print(ub, lb, average_level)
                 map_data[idx] = average_level
             else:
                 for m in map_data:
                     idx = np.where((m < ub) & (m > lb))[0]
                     # print(idx)
+                    print(ub, lb, average_level)
                     m[idx] = average_level
         if colors is None:
             _colors = []
@@ -1257,11 +1254,13 @@ class figureGenerator:
             #     else:
             #         _colors.append(c)
         print(_colors)
+        # assert False
         self.colorMaps["color_map"] = ListedColormap(_colors)  # len(levels))
         # print(self.colorMaps["color_map"])
         # assert False
         print(map_data)
-        return map_data
+        self.digitized = True
+        return 0, i + 1
 
     def plot_map(
         self,
@@ -1310,11 +1309,6 @@ class figureGenerator:
                 x_decimals=unique_x_decimals,
                 y_decimals=unique_y_decimals,
             )
-
-            # print("map", map_data)
-            # print("x", datax)
-            # print("y", datay)
-            # assert False
             if zoverlay is not None:
                 (
                     overlay_map,
@@ -1368,7 +1362,7 @@ class figureGenerator:
         # if fix_nans:
         #     map = self.fix_nan_in_map(np.unique(xdata), np.unique(ydata), map)
         if digitize_levels is not None:
-            self.digitize_map(map_data, digitize_levels, digitize_colors)
+            vmin, vmax = self.digitize_map(map_data, digitize_levels, digitize_colors)
 
         if zscale == "log":
             norm = LogNorm(vmin=vmin, vmax=vmax)
@@ -1399,6 +1393,9 @@ class figureGenerator:
                 self.get_axis(ax_idx), map_data, plot_contour, "black", norm=norm
             )
         else:
+            if norm != None:
+                vmin = None
+                vmax = None
             self.colorFig = self.get_axis(ax_idx).imshow(
                 map_data,
                 vmin=vmin,
@@ -1406,6 +1403,7 @@ class figureGenerator:
                 cmap=self.colorMaps["color_map"],
                 aspect=aspect,
                 origin="upper",
+                norm=norm,
             )
         if plot_contour_lines is not None:
             self.plot_contour(
@@ -1877,7 +1875,10 @@ class figureGenerator:
             cfig,
             cax=cbar_ax,
         )
-        cbar.set_ticks(zticks)
+        if hasattr(self, "digitized") and self.digitized:
+            cbar.set_ticks(list(range(len(zticks))))
+        else:
+            cbar.set_ticks(zticks)
         cbar.set_ticklabels(self.format_ticks(zticks, zformat))
         cbar.set_label(zlabel, rotation=-90, labelpad=zlabelpad)
         self.plotted_data.update({"zlabel": zlabel})

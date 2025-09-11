@@ -39,6 +39,7 @@ class mapPlotter:
         axis_options=None,
         generate_plot=True,
         fig_options=None,
+        plot_options=None,
     ):
         self.xdata = self.psData.get_data(data_dir, xdata)
         self.ydata = self.psData.get_data(data_dir, ydata)
@@ -55,6 +56,10 @@ class mapPlotter:
             self.axis_options = {}
         else:
             self.axis_options = axis_options
+        if plot_options is None:
+            self.plot_options = {}
+        else:
+            self.plot_options = plot_options
         if self.axis_options.get("xlabel") == None:
             self.axis_options["xlabel"] = self._get_axis_label(
                 self.xdata.data_label, self.xdata.mpl_units
@@ -84,13 +89,10 @@ class mapPlotter:
             xdata=self.xdata.data,
             ydata=self.ydata.data,
             zdata=self.zdata.data,
-            # digitize_levels=self.zlevels,
             build_map=True,
             vmin=min(self.zlevels),
             vmax=max(self.zlevels),
-            # zscale="log",
-            # plot_contour_lines=self.zlevels,
-            # plot_contour=self.zlevels,
+            **self.plot_options
         )
 
     def generate_figure(self):

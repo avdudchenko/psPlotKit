@@ -15,6 +15,7 @@ class psCosting:
         costing_block="fs.costing",
         costing_key="costing",
         default_flow="fs.product.properties[0.0].flow_vol_phase[Liq]",
+        include_indirect_in_device_costs=True,
     ):
         self.default_costing_block = costing_block
         self.costing_key = costing_key
@@ -24,6 +25,7 @@ class psCosting:
         self.default_costing()
         self.USD = qs.UnitQuantity("USD")
         self.fixed_operating_cost_ref = ["fixed_operating_cost"]
+        self.include_indirect_in_device_costs = include_indirect_in_device_costs
 
     def default_costing(self):
         self.default_costing_params = {
@@ -102,7 +104,8 @@ class psCosting:
             sum_opex = None
             sum_capex = None
             sum_total = None
-            
+            sum_total_indirect = None
+            sum_levelized_indirect = None
             for group, cost_breakdown in self.costed_groups.items():
                 capex = self.get_device_cost(
                     cost_breakdown["CAPEX"], udir, "CAPEX", cost_breakdown["block_name"]
@@ -110,8 +113,6 @@ class psCosting:
                 opex = self.get_device_cost(
                     cost_breakdown["OPEX"], udir, "OPEX", cost_breakdown["block_name"]
                 )
-                # if 'HPRO' in udir:
-                #print(udir, group, "CAPEX", capex, "OPEX", opex)
                 if capex is not None and opex is not None:
                     if "factor_maintenance_labor_chemical" in self.global_costs:
                         factor_maintenance_labor_chemical = self.global_costs[
@@ -121,7 +122,13 @@ class psCosting:
                         factor_maintenance_labor_chemical = self.global_costs[
                             "maintenance_labor_chemical_factor"
                         ]
-                    opex = opex + capex * factor_maintenance_labor_chemical
+                    indirect_cost = capex * factor_maintenance_labor_chemical
+                    if sum_total_indirect is None:
+                        sum_total_indirect = indirect_cost
+                    else:
+                        sum_total_indirect += indirect_cost
+                    if self.include_indirect_in_device_costs:
+                        opex = opex + indirect_cost
                 if "factor_capital_annualization" in self.global_costs:
                     factor_capital_annualization = self.global_costs[
                         "factor_capital_annualization"
@@ -131,10 +138,21 @@ class psCosting:
                         "capital_recovery_factor"
                     ]
                 capex = capex * factor_capital_annualization
-                total = capex + opex
+                if self.include_indirect_in_device_costs:
+                    total = capex + opex
+                else:
+                    total = capex + opex + indirect_cost
                 lcapex = self.normalize_cost(capex)
                 lopex = self.normalize_cost(opex)
-                ltotal = lcapex + lopex
+                lindirect = self.normalize_cost(indirect_cost)
+                if sum_levelized_indirect is None:
+                    sum_levelized_indirect = lindirect
+                else:
+                    sum_levelized_indirect += lindirect
+                if self.include_indirect_in_device_costs:
+                    ltotal = lcapex + lopex + lindirect
+                else:
+                    ltotal = lcapex + lopex
                 if sum_ltotal is None:
                     sum_ltotal = ltotal
                     sum_lpex = lopex
@@ -175,6 +193,17 @@ class psCosting:
                 )
                 self.psDataManager.add_data(
                     udir,
+                    ("cost_breakdown", group, "INDIRECT"),
+                    psData(
+                        "indirect_cost",
+                        "cost_tool",
+                        indirect_cost.magnitude,
+                        "USD/year",
+                        data_label="Annual cost",
+                    ),
+                )
+                self.psDataManager.add_data(
+                    udir,
                     ("cost_breakdown", group, "TOTAL"),
                     psData(
                         "total",
@@ -192,6 +221,17 @@ class psCosting:
                         "levelized_capex",
                         "cost_tool",
                         lcapex.magnitude,
+                        "USD/m**3",
+                        data_label="LCOW",
+                    ),
+                )
+                self.psDataManager.add_data(
+                    udir,
+                    ("cost_breakdown", group, "levelized", "INDIRECT"),
+                    psData(
+                        "levelized_indirect_cost",
+                        "cost_tool",
+                        lindirect.magnitude,
                         "USD/m**3",
                         data_label="LCOW",
                     ),
@@ -218,7 +258,30 @@ class psCosting:
                         data_label="LCOW",
                     ),
                 )
-
+            # print(sum_total_indirect.magnitude)
+            # assert false
+            self.psDataManager.add_data(
+                udir,
+                ("cost_breakdown", "INDIRECT", "INDIRECT_TOTAL"),
+                psData(
+                    "indirect_cost",
+                    "cost_tool",
+                    indirect_cost.magnitude,
+                    "USD/year",
+                    data_label="Annual cost",
+                ),
+            )
+            self.psDataManager.add_data(
+                udir,
+                ("cost_breakdown", "INDIRECT", "levelized", "INDIRECT_TOTAL"),
+                psData(
+                    "levelized_indirect_cost",
+                    "cost_tool",
+                    sum_levelized_indirect.magnitude,
+                    "USD/m**3",
+                    data_label="LCOW",
+                ),
+            )
             if len(sum_ltotal[sum_lcapex == sum_lcapex]) > 1:
                 error = np.nanmax(np.abs(self.global_costs["LCOW"] - sum_ltotal)) > 0.01
                 if error:
@@ -266,14 +329,15 @@ class psCosting:
         # assert False
         for device in device_keys:
             if isinstance(device_keys, dict):
-                block_name = device_keys.get(device,None)
+                block_name = device_keys.get(device, None)
             for fs_device in self.costed_devices:
                 if device == fs_device:
                     for d_key in self.costed_devices[fs_device][cost_type]:
                         get_data = True
                         if (
                             block_name != None
-                            and self.check_key_block_in_key(block_name, device, d_key) == False
+                            and self.check_key_block_in_key(block_name, device, d_key)
+                            == False
                         ):
                             # print(
                             #     "Block name {} not in key {}".format(block_name, d_key)
@@ -311,7 +375,7 @@ class psCosting:
                                         ]
                                     )
                                     if fixed_check == False:
-                                        #print(d_key)
+                                        # print(d_key)
                                         data = (
                                             data
                                             * self.global_costs["utilization_factor"]

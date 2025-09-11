@@ -110,6 +110,7 @@ class psDataManager(dict):
         costing_block="fs.costing",
         costing_key="costing",
         default_flow="fs.product.properties[0.0].flow_vol_phase[Liq]",
+        include_indirect_in_device_costs=True,
     ):
         for instance in self.psDataImportInstances:
             pscosting = psCosting(
@@ -117,6 +118,7 @@ class psDataManager(dict):
                 costing_block=costing_block,
                 costing_key=costing_key,
                 default_flow=default_flow,
+                include_indirect_in_device_costs=include_indirect_in_device_costs,
             )
             pscosting.define_groups(costing_groups)
             pscosting.get_costing_data(psDataManager=self)
