@@ -150,9 +150,9 @@ class psCosting:
                 else:
                     sum_levelized_indirect += lindirect
                 if self.include_indirect_in_device_costs:
-                    ltotal = lcapex + lopex + lindirect
-                else:
                     ltotal = lcapex + lopex
+                else:
+                    ltotal = lcapex + lopex + lindirect
                 if sum_ltotal is None:
                     sum_ltotal = ltotal
                     sum_lpex = lopex
