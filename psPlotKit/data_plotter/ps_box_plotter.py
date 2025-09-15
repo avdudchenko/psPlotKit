@@ -256,12 +256,18 @@ class boxPlotter:
                         #         cur_line[key] = val
 
                         if self.line_groups != {}:
+
                             for g_key in self.line_groups:
-                                # print(skey, g_key)
+                                print("g_key", skey, g_key, g_key in str(skey))
                                 if g_key in str(skey):
                                     _label = tuple([g_key, _label])
                                     plot_label.replace(g_key, "")
-                                    cur_box["color"] = self._get_color(g_key)
+                                    if "color" in self.line_groups[g_key]:
+                                        cur_box["color"] = self.line_groups[g_key][
+                                            "color"
+                                        ]
+                                    else:
+                                        cur_box["color"] = self._get_color(g_key)
                         else:
                             cur_box["color"] = self._get_color(
                                 plot_label, single_group=True

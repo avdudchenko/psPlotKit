@@ -1620,7 +1620,10 @@ class figureGenerator:
             else:
                 if yticks is None:
                     yticks = list(range(len(yticklabels)))
-                self.get_axis(ax_idx).set_ylim(-0.5 + yticks[0], yticks[-1] + 0.5)
+                if ylims is None:
+                    self.get_axis(ax_idx).set_ylim(-0.5 + yticks[0], yticks[-1] + 0.5)
+                else:
+                    self.get_axis(ax_idx).set_ylim(ylims[0], ylims[1])
                 self.get_axis(ax_idx).set_yticks(yticks)
             if yformat is not None:
                 yticklabels = self.format_ticks(yticklabels, yformat)
