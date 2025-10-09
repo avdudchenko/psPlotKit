@@ -88,7 +88,7 @@ class figureGenerator:
     def gen_colormap(
         self, num_samples=10, vmin=0, vmax=1, map_name="viridis", return_map=False
     ):
-        map_object = matplotlib.colormaps.get_cmap(map_name)(num_samples)
+        map_object = matplotlib.colormaps.get_cmap(map_name)
         colors = map_object(list(range(num_samples)))
         self.colorMaps[map_name] = colors
         self.colormaps = map_name
@@ -97,7 +97,7 @@ class figureGenerator:
                 norm=matplotlib.colors.Normalize(vmin, vmax), cmap=map_object
             )
         else:
-            return colors
+            return map_object
 
     def init_figure(
         self,

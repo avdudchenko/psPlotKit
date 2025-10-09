@@ -137,12 +137,12 @@ class psCosting:
                     factor_capital_annualization = self.global_costs[
                         "capital_recovery_factor"
                     ]
-                capex = capex * factor_capital_annualization
+                anualized_capex = capex * factor_capital_annualization
                 if self.include_indirect_in_device_costs:
-                    total = capex + opex
+                    total = anualized_capex + opex
                 else:
-                    total = capex + opex + indirect_cost
-                lcapex = self.normalize_cost(capex)
+                    total = anualized_capex + opex + indirect_cost
+                lcapex = self.normalize_cost(anualized_capex)
                 lopex = self.normalize_cost(opex)
                 lindirect = self.normalize_cost(indirect_cost)
                 if sum_levelized_indirect is None:
@@ -158,7 +158,7 @@ class psCosting:
                     sum_lpex = lopex
                     sum_lcapex = lcapex
                     sum_opex = opex
-                    sum_capex = capex / factor_capital_annualization.magnitude
+                    sum_capex = anualized_capex / factor_capital_annualization.magnitude
                     sum_total = total
                 else:
                     sum_ltotal = sum_ltotal + ltotal
@@ -166,23 +166,35 @@ class psCosting:
                     sum_lcapex = sum_lcapex + lcapex
                     sum_opex = sum_opex + opex
                     sum_capex = (
-                        sum_capex + capex / factor_capital_annualization.magnitude
+                        sum_capex
+                        + anualized_capex / factor_capital_annualization.magnitude
                     )
                     sum_total = total + sum_total
                 self.psDataManager.add_data(
                     udir,
-                    ("cost_breakdown", group, "CAPEX"),
+                    ("cost_breakdown", group, "Absolute", "CAPEX"),
                     psData(
                         "capex",
                         "cost_tool",
                         capex.magnitude,
+                        "USD",
+                        data_label="Annual cost",
+                    ),
+                )
+                self.psDataManager.add_data(
+                    udir,
+                    ("cost_breakdown", group, "Annualized", "CAPEX"),
+                    psData(
+                        "capex",
+                        "cost_tool",
+                        anualized_capex.magnitude,
                         "USD/year",
                         data_label="Annual cost",
                     ),
                 )
                 self.psDataManager.add_data(
                     udir,
-                    ("cost_breakdown", group, "OPEX"),
+                    ("cost_breakdown", group, "Absolute", "OPEX"),
                     psData(
                         "opex",
                         "cost_tool",
