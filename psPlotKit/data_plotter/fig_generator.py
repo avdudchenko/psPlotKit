@@ -17,13 +17,17 @@ from scipy.interpolate import (
     NearestNDInterpolator,
     # RBFInterpolator,
 )
+
+from psPlotKit.util.logger import define_logger
 from matplotlib.colors import ListedColormap
 import math
 import copy
 from matplotlib import cm
 
+_logger = define_logger(__name__, "FigureGenerator", level="INFO")
 
-class figureGenerator:
+
+class FigureGenerator:
     def __init__(
         self,
         font_size=10,
@@ -173,171 +177,6 @@ class figureGenerator:
             self.current_color_index[ax] += val_update
             return int(self.current_color_index[ax])
 
-    def plot_all_tables(
-        self,
-        table_data,
-        type_data,
-        sub_tables=[
-            [
-                "operating condition",
-                ["Operating metrics", "Lower Limit", "Upper Limit"],
-            ],
-            ["cost metric", ["Cost metrics", "Lower Limit", "Upper Limit"]],
-            [
-                "performance metric",
-                ["Performance metrics", "Lower Limit", "Upper Limit"],
-            ],
-        ],
-        column_positions=[1.75, 2.125, 2.655],
-    ):
-        table_y_offset = 0
-        ylims, xlims = table_data.shape
-        ylims += len(sub_tables) * 2 - 2
-        for st, sub_table in enumerate(sub_tables):
-            table_type = sub_table[0]
-            print(table_type, type_data)
-            data_idxs = np.where(table_type == type_data)[0]
-            print(data_idxs)
-            self.plot_table(
-                table_data[data_idxs],
-                colLabels=sub_table[1],
-                xlims=xlims,
-                ylims=ylims,
-                table_y_offset=table_y_offset,
-                column_positions=column_positions,
-            )
-            table_y_offset += len(data_idxs) + 2
-            print(table_y_offset)
-
-    def plot_table(
-        self,
-        data,
-        rowLabels=None,
-        colLabels=None,
-        types=None,
-        column_positions=[1.75, 2.125, 2.655],
-        xlims=None,
-        ylims=None,
-        table_y_offset=0,
-    ):
-        size = data.shape
-        self.ax[-1].set_axis_off()
-
-        def power_offset_adjust(strings):
-            offset = 0
-            for s in strings:
-                if "^" in s:
-                    offset = 0.175
-                    break
-            return offset
-
-        if xlims is None:
-            self.ax[-1].set_xlim(0, size[1])
-        else:
-            self.ax[-1].set_xlim(0, xlims)
-
-        if ylims is None:
-            self.ax[-1].set_ylim(size[0], 0)
-        else:
-            self.ax[-1].set_ylim(ylims, 0)
-        global_offset = 0.225
-        global_offset += power_offset_adjust(colLabels)
-
-        for c, colLable in enumerate(colLabels):
-            if c == 0:
-                ha = "right"
-            else:
-                ha = "center"
-
-            self.ax[-1].text(
-                column_positions[c],
-                0 + table_y_offset + global_offset,
-                colLable,
-                ha=ha,
-                va="baseline",
-                color="black",
-                fontsize=12,
-                fontstyle="italic",
-            )
-
-        self.ax[-1].plot(
-            [0, size[1]],
-            [1 - 0.5 + table_y_offset, 1 - 0.5 + table_y_offset],
-            lw=1.5,
-            color="black",
-        )
-        # global_offset+=0.1
-        for d, data_row in enumerate(data):
-            global_offset += power_offset_adjust(data_row)
-            for r, val in enumerate(data_row):
-                if r == 0:
-                    ha = "right"
-                else:
-                    ha = "center"
-
-                self.ax[-1].text(
-                    column_positions[r],
-                    d + 1 + table_y_offset + global_offset,
-                    val,
-                    ha=ha,
-                    va="center",
-                    color="black",
-                    fontsize=11,
-                )
-
-    def generated_stats(
-        self, parameters, data_manager, mask, percentiles=[5, 25, 50, 75, 95]
-    ):
-        output_dict = {}
-        # print(parameters)
-        for key in parameters:
-            # print(key)
-            data = data_manager.get_data_set(
-                "sweep_params", parameters[key]["model_value"]
-            )[mask]
-            stats = np.percentile(data, percentiles)
-            # print('STATS',data)
-            output_dict[key] = {}
-            output_dict[key]["model_value"] = parameters[key]["model_value"]
-            for i, p in enumerate(percentiles):
-                output_dict[key][str(p)] = stats[i]
-        # print(output_dict)
-        return output_dict
-
-    def dict_to_table(self, dict, column_values, metadata_function=None, sigfigs=3):
-        data = []
-        types = []
-        for key in dict:
-            data.append([])
-            for cv in column_values:
-                if cv == "model_value":
-                    if metadata_function is not None:
-                        # print(dict[key][cv])
-                        val = metadata_function(dict[key][cv])
-                        types.append(metadata_function(dict[key][cv], type="type"))
-                        conversion = metadata_function(
-                            dict[key][cv], type="unit_conversion"
-                        )
-                else:
-                    val = dict[key][cv]
-                    if metadata_function is not None:
-                        # print(val,conversion)
-                        val = str(float(val) * float(conversion))
-                        val = sigfig.round(val, sigfigs)
-                        print(val)
-                        if len(str(val)) > sigfigs * 2:
-                            val = str(Decimal(val)).lower()
-                        print(val)
-                        if "e" in val:
-                            power = str(int(val.split("e")[-1]))
-                            val = val.split("e")[0] + "x10$^{" + power + "}$"
-                        if val.split(".")[-1] == "0":
-                            val = self.format_value(
-                                float(val), len(val.split(".")[-1]) - 1
-                            )
-                data[-1].append(val)
-        return np.array(data), np.array(types)
-
     def plot_bar(
         self,
         x_pos,
@@ -483,63 +322,7 @@ class figureGenerator:
         )
         if save_label is None:
             save_label = label
-        if save_label != False:
-            if y2data is not None:
-                self.plotted_data.update(
-                    {
-                        save_label: {
-                            "datax": xdata,
-                            "datay": np.array(ydata) - np.array(y2data),
-                        }
-                    }
-                )
-            else:
-                self.plotted_data.update(
-                    {
-                        save_label: {
-                            "datax": np.array(xdata) - np.array(x2data),
-                            "datay": np.array(ydata),
-                        }
-                    }
-                )
 
-    # def plot_scatter_3D(
-    #     self,
-    #     xdata,
-    #     ydata,
-    #     zdata=None,
-    #     label="",
-    #     marker="o",
-    #     marker_size=10,
-    #     vmin=None,
-    #     vmax=None,
-    #     ls="-",
-    #     ax_idx=0,
-    #     markerfacecolor=None,
-    #     zorder=4,
-    #     color=None,
-    #     **kwargs,
-    # ):
-    #     if zdata is None:
-    #         if color is None:
-    #             color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
-    #             self.get_color(ax_idx, 1)
-    #     else:
-    #         color = zdata
-    #     self.colorFig = self.get_axis(ax_idx).scatter(
-    #         xdata,
-    #         ydata,
-    #         c=color,
-    #         cmap=self.colorMaps["color_map"],
-    #         label=label,
-    #         s=marker_size,
-    #         ls=ls,
-    #         facecolors=markerfacecolor,
-    #         vmin=vmin,
-    #         vmax=vmax,
-    #         zorder=zorder,
-    #         marker=marker,
-    #
     def plot_arrow(
         self,
         x,
@@ -2177,3 +1960,7 @@ class figureGenerator:
             # spamwriter.writerow(header)
             for k in data:
                 spamwriter.writerow(k)
+
+
+class figureGenerator(FigureGenerator):
+    _logger.warning("figureGenerator is deprecated, please use FigureGenerator")

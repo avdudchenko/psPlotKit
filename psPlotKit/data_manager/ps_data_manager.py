@@ -1,22 +1,24 @@
 import numpy as np
 from psPlotKit.util.logger import define_logger
 import quantities as qs
-from psPlotKit.data_manager.ps_data import psData
-from psPlotKit.data_manager.data_importer import psDataImport
-from psPlotKit.data_manager.ps_costing_tool import psCosting
+from psPlotKit.data_manager.ps_data import PsData
+from psPlotKit.data_manager.data_importer import PsDataImport
+from psPlotKit.data_manager.ps_costing_tool import PsCosting
 import copy
 import yaml
+import warnings
 
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
-_logger = define_logger(__name__, "psDataManager", level="INFO")
+_logger = define_logger(__name__, "PsDataManager", level="INFO")
 
 
-class psDataManager(dict):
+class PsDataManager(dict):
     def __init__(self, data_files=None):
         self.directory_keys = []
         self.data_keys = []
         self.selected_directories = []
+        self.registered_key_list = None
         self.min = "min"
         self.max = "max"
         self.where = "where"
@@ -27,18 +29,18 @@ class psDataManager(dict):
         self.global_reduction_directory = None
         if data_files is not None:
 
-            self.psDataImportInstances = []
+            self.PsDataImportInstances = []
             if isinstance(data_files, str):
-                self.psDataImportInstances.append(psDataImport(data_files))
+                self.PsDataImportInstances.append(PsDataImport(data_files))
             else:
                 for df in data_files:
                     if isinstance(df, str):
-                        self.psDataImportInstances.append(psDataImport(df))
+                        self.PsDataImportInstances.append(PsDataImport(df))
                     else:
                         directory = df["return_directory"]
                         file_loc = df["file"]
-                        self.psDataImportInstances.append(
-                            psDataImport(file_loc, default_return_directory=directory)
+                        self.PsDataImportInstances.append(
+                            PsDataImport(file_loc, default_return_directory=directory)
                         )
 
     def load_data(
@@ -73,15 +75,53 @@ class psDataManager(dict):
                 exact_keys: (optional) - if exact keys should be imported
                 match_accuracy: (optional) - how accurately the keys need to match if exact_keys == False
         """
-        for instance in self.psDataImportInstances:
+        print(self.register_data_key, data_key_list)
+        if self.registered_key_list is None:
+            self.registered_key_list = data_key_list
+        elif data_key_list is not None:
+            self.registered_key_list = self.registered_key_list + data_key_list
+        for instance in self.PsDataImportInstances:
             instance.get_data(
-                data_key_list=data_key_list,
+                data_key_list=self.registered_key_list,
                 directories=directories,
                 num_keys=num_keys,
                 exact_keys=exact_keys,
                 match_accuracy=match_accuracy,
-                psDataManager=self,
+                PsDataManager=self,
             )
+
+    def register_data_key(
+        self,
+        file_key,
+        return_key,
+        units=None,
+        assign_units=None,
+        conversion_factor=None,
+    ):
+        """register a key to be imported on next load_data call
+        file_key: key in h5 file
+        return_key: key to use when storing data
+        units: units to convert data to on import
+        assign_units (optional): units to assign to data on import
+        conversion_factor: (optional) - this will apply manual conversion factor to raw data before assigning units
+                        only works when user passes in 'assign_units' option.
+        """
+        if self.registered_key_list is None:
+            self.registered_key_list = []
+        key_dict = {}
+        key_dict["filekey"] = file_key
+        key_dict["return_key"] = return_key
+        if units is not None:
+            key_dict["units"] = units
+        if assign_units is not None:
+            key_dict["assign_units"] = assign_units
+        if conversion_factor is not None:
+            key_dict["conversion_factor"] = conversion_factor
+        if assign_units is None and conversion_factor is not None:
+            raise ValueError(
+                "conversion_factor only works when assign_units is specified"
+            )
+        self.registered_key_list.append(key_dict)
 
     def display(self):
         """func to show file data content in a clean manner"""
@@ -112,16 +152,16 @@ class psDataManager(dict):
         default_flow="fs.product.properties[0.0].flow_vol_phase[Liq]",
         include_indirect_in_device_costs=True,
     ):
-        for instance in self.psDataImportInstances:
-            pscosting = psCosting(
+        for instance in self.PsDataImportInstances:
+            costing_tool = PsCosting(
                 instance,
                 costing_block=costing_block,
                 costing_key=costing_key,
                 default_flow=default_flow,
                 include_indirect_in_device_costs=include_indirect_in_device_costs,
             )
-            pscosting.define_groups(costing_groups)
-            pscosting.get_costing_data(psDataManager=self)
+            costing_tool.define_groups(costing_groups)
+            costing_tool.get_costing_data(PsDataManager=self)
 
     def _get_data_key(self, udir):
         if isinstance(udir, tuple):
@@ -149,8 +189,8 @@ class psDataManager(dict):
     def add_data(self, __dir_key, __key, __value) -> None:
         __dir_key, __key, __data_dir = self._process_dir_data_keys(__dir_key, __key)
         self.add_key(__dir_key, __key)
-        if isinstance(__value, psData) == False:
-            raise TypeError("Expected psData instance")
+        if isinstance(__value, PsData) == False:
+            raise TypeError("Expected PsData instance")
         __value.__key = __key
         __value.__dir_key = __dir_key
         return super().__setitem__(__data_dir, __value)
@@ -240,10 +280,10 @@ class psDataManager(dict):
 
     def get_selected_data(self, flatten=False):
         return_list = []
-        psData = psDataManager()
+        PsData = PsDataManager()
         for dir_key in self.selected_directories:
-            psData.add_data(self[dir_key].__dir_key, self[dir_key].__key, self[dir_key])
-        return psData
+            PsData.add_data(self[dir_key].__dir_key, self[dir_key].__key, self[dir_key])
+        return PsData
 
     def select_dir_keys(self, selected_keys, require_all_in_dir, exact) -> None:
         """find if provided keys are dir key, and return
@@ -268,21 +308,12 @@ class psDataManager(dict):
                     result = _key_dive(dkey, key)
                     if result:
                         num_keys_found += 1
-                    # if isinstance(dkey, str):
-                    #     if key == dkey:
-                    #         num_keys_found += 1
-                    # else:
-                    #     for dl in dkey:
-                    #         if str(key) == str(dl):
-                    #             num_keys_found += 1
                 else:
                     if str(key) in str(dkey):
                         num_keys_found += 1
-            # assert False
             if len(selected_keys) == num_keys_found and require_all_in_dir:
                 dir_keys.append(dkey)
             elif require_all_in_dir == False and num_keys_found > 0:
-                # print(dkey, selected_keys)
                 dir_keys.append(dkey)
         if len(dir_keys) == 0:
             dir_keys = current_keys[:]
@@ -316,7 +347,6 @@ class psDataManager(dict):
         def get_nearest_vals(data, base_value):
             delta = np.abs(data - base_value)
             min_vals = np.argsort(delta)
-            nearest_values = data[min_vals][:2]
             nearest_idxs = min_vals[:2]
             return nearest_idxs
 
@@ -335,7 +365,7 @@ class psDataManager(dict):
                 self.add_data(
                     norm_base_skey,
                     key,
-                    psData(
+                    PsData(
                         key,
                         self.normalized_data,
                         norm_data,
@@ -365,12 +395,11 @@ class psDataManager(dict):
                                 data[nearest_idxs][sort_idx],
                                 related_data[nearest_idxs][sort_idx],
                             )
-                            # nearest_val_avg = np.average(related_data[nearest_idxs])
                             norm_related_data = (related_data - interp) / interp
                             self.add_data(
                                 norm_base_skey,
                                 related_key,
-                                psData(
+                                PsData(
                                     related_key,
                                     self.normalized_data,
                                     norm_related_data,
@@ -390,7 +419,7 @@ class psDataManager(dict):
                         self.add_data(
                             norm_base_skey,
                             related_key,
-                            psData(
+                            PsData(
                                 related_key,
                                 self.normalized_data,
                                 norm_related_data,
@@ -450,8 +479,6 @@ class psDataManager(dict):
                     get_dim_data(data_keys["keys"], to_units=data_keys.get("units"))
                 )
             _function_dict[key] = np.array(data)
-            # _function = _function.replace(key, f"np.array({key})")
-        # if "np." in function:
         _function_dict["np"] = np
         _logger.info(
             "Evaluating function: {}, new dir and key {} {}".format(
@@ -459,13 +486,10 @@ class psDataManager(dict):
             )
         )
         result_data = eval(_function, _function_dict)
-        # if isinstance(directory, (tuple, list)):
-        #     directory = [directory]
-        print(result_data)
         self.add_data(
             directory,
             name,
-            psData(
+            PsData(
                 name,
                 "evaluated function",
                 result_data,
@@ -509,7 +533,6 @@ class psDataManager(dict):
             return sorted_idxs, idxs, idx_type
 
         for udir in self.keys():
-            # print("udir", udir)
             if "stacked_data" not in str(udir) and str(data_key) in str(
                 self._get_data_key(udir)
             ):
@@ -537,7 +560,6 @@ class psDataManager(dict):
                         )
                     ukey = list(ukey)
                     for dkey in stack_keys:
-                        print(dkey, ukey)
                         ukey.remove(dkey)
                     if len(ukey) == 1:
                         ukey = ukey[0]
@@ -554,7 +576,6 @@ class psDataManager(dict):
                         unique_dirs[work_dir]["dirs"].append(udir)
                         unique_dirs[work_dir]["stack_dir"].append(stack_dir)
                         unique_dirs[work_dir]["idxs"].append(ukey)
-        print(unique_dirs)
         if unique_dirs != {}:
             _logger.info("Stacking: {}".format(dir_to_stack))
             _logger.info("Stack indexes are: {}".format(stack_idxs))
@@ -621,14 +642,14 @@ class psDataManager(dict):
                     units = "dimensionless"
                 else:
                     units = units[0]
-                new_data = psData(
+                new_data = PsData(
                     data_key,
                     "stacked_data",
                     map_data,
                     units,
                     data_label=data.data_label,
                 )
-                idx_data = psData(
+                idx_data = PsData(
                     stack_keys, "stacked_data_idxs", map_idxs, "dimensionless"
                 )
                 new_dir = [self.reduced_data]
@@ -642,7 +663,7 @@ class psDataManager(dict):
                         reduction_type,
                         new_data.data,
                     )
-                    idx_data = psData(
+                    idx_data = PsData(
                         stack_keys, "stacked_data_idxs", reduced_idxs, "dimensionless"
                     )
                     idx_data.filter_type = "2D"
@@ -653,11 +674,9 @@ class psDataManager(dict):
                 new_keys.append(data_key)
                 new_keys.append(stack_keys)
         return unique_dirs
-        # _logger.info("Added data to dirs {}".format(new_dirs))
-        # _logger.info("Created new data keys {}".format(new_keys))
 
     def add_mask(self, directory, indexes, data_shape=None, shape="1D"):
-        idx_data = psData("filter_idx", "filter_idx", indexes, "dimensionless")
+        idx_data = PsData("filter_idx", "filter_idx", indexes, "dimensionless")
         idx_data.filter_type = shape
         if data_shape == None:
             idx_data.data_shape = indexes.shape
@@ -741,14 +760,14 @@ class psDataManager(dict):
         match_accuracy=0.9,
     ):
 
-        for instance in self.psDataImportInstances:
+        for instance in self.PsDataImportInstances:
             instance.get_data(
                 data_key_list=data_key_list,
                 directories=directories,
                 num_keys=num_keys,
                 exact_keys=exact_keys,
                 match_accuracy=match_accuracy,
-                psDataManager=self,
+                PsDataManager=self,
             )
 
             sweep_reference_raw = instance._get_data_set(
@@ -833,3 +852,7 @@ class psDataManager(dict):
             results_dict[sweep]["VOI"] = voi
 
         return results_dict
+
+
+class psDataManager(PsDataManager):
+    _logger.warning("psDataManager is deprecated, please use PsDataManager")

@@ -1,14 +1,14 @@
 from psPlotKit.util import logger
 import numpy as np
 import quantities as qs
-from psPlotKit.data_manager.ps_data import psData
+from psPlotKit.data_manager.ps_data import PsData
 
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
-_logger = logger.define_logger(__name__, "psCosting")
+_logger = logger.define_logger(__name__, "PsCosting")
 
 
-class psCosting:
+class PsCosting:
     def __init__(
         self,
         psManager,
@@ -77,13 +77,13 @@ class psCosting:
 
         self.costing_group_keys = {}
 
-    def get_costing_data(self, psDataManager):
+    def get_costing_data(self, PsDataManager):
         self.get_costing_block_data()
-        self.psDataManager = psDataManager
-        self.psDataManager.load_data(self.costing_block_keys, exact_keys=True)
-        self.unique_directory_keys = self.psDataManager.directory_keys
+        self.PsDataManager = PsDataManager
+        self.PsDataManager.load_data(self.costing_block_keys, exact_keys=True)
+        self.unique_directory_keys = self.PsDataManager.directory_keys
         # print(self.unique_directory_keys)
-        # for key in self.psDataManager.keys():
+        # for key in self.PsDataManager.keys():
         #     print(key)
         self.calculate_costs()
 
@@ -170,10 +170,10 @@ class psCosting:
                         + anualized_capex / factor_capital_annualization.magnitude
                     )
                     sum_total = total + sum_total
-                self.psDataManager.add_data(
+                self.PsDataManager.add_data(
                     udir,
                     ("cost_breakdown", group, "Absolute", "CAPEX"),
-                    psData(
+                    PsData(
                         "capex",
                         "cost_tool",
                         capex.magnitude,
@@ -181,10 +181,10 @@ class psCosting:
                         data_label="Annual cost",
                     ),
                 )
-                self.psDataManager.add_data(
+                self.PsDataManager.add_data(
                     udir,
                     ("cost_breakdown", group, "Annualized", "CAPEX"),
-                    psData(
+                    PsData(
                         "capex",
                         "cost_tool",
                         anualized_capex.magnitude,
@@ -192,10 +192,10 @@ class psCosting:
                         data_label="Annual cost",
                     ),
                 )
-                self.psDataManager.add_data(
+                self.PsDataManager.add_data(
                     udir,
                     ("cost_breakdown", group, "Absolute", "OPEX"),
-                    psData(
+                    PsData(
                         "opex",
                         "cost_tool",
                         opex.magnitude,
@@ -203,10 +203,10 @@ class psCosting:
                         data_label="Annual cost",
                     ),
                 )
-                self.psDataManager.add_data(
+                self.PsDataManager.add_data(
                     udir,
                     ("cost_breakdown", group, "INDIRECT"),
-                    psData(
+                    PsData(
                         "indirect_cost",
                         "cost_tool",
                         indirect_cost.magnitude,
@@ -214,10 +214,10 @@ class psCosting:
                         data_label="Annual cost",
                     ),
                 )
-                self.psDataManager.add_data(
+                self.PsDataManager.add_data(
                     udir,
                     ("cost_breakdown", group, "TOTAL"),
-                    psData(
+                    PsData(
                         "total",
                         "cost_tool",
                         total.magnitude,
@@ -226,10 +226,10 @@ class psCosting:
                     ),
                 )
 
-                self.psDataManager.add_data(
+                self.PsDataManager.add_data(
                     udir,
                     ("cost_breakdown", group, "levelized", "CAPEX"),
-                    psData(
+                    PsData(
                         "levelized_capex",
                         "cost_tool",
                         lcapex.magnitude,
@@ -237,10 +237,10 @@ class psCosting:
                         data_label="LCOW",
                     ),
                 )
-                self.psDataManager.add_data(
+                self.PsDataManager.add_data(
                     udir,
                     ("cost_breakdown", group, "levelized", "INDIRECT"),
-                    psData(
+                    PsData(
                         "levelized_indirect_cost",
                         "cost_tool",
                         lindirect.magnitude,
@@ -248,10 +248,10 @@ class psCosting:
                         data_label="LCOW",
                     ),
                 )
-                self.psDataManager.add_data(
+                self.PsDataManager.add_data(
                     udir,
                     ("cost_breakdown", group, "levelized", "OPEX"),
-                    psData(
+                    PsData(
                         "levelized_opex",
                         "cost_tool",
                         lopex.magnitude,
@@ -259,10 +259,10 @@ class psCosting:
                         data_label="LCOW",
                     ),
                 )
-                self.psDataManager.add_data(
+                self.PsDataManager.add_data(
                     udir,
                     ("cost_breakdown", group, "levelized", "TOTAL"),
-                    psData(
+                    PsData(
                         "levelized_total",
                         "cost_tool",
                         ltotal.magnitude,
@@ -272,10 +272,10 @@ class psCosting:
                 )
             # print(sum_total_indirect.magnitude)
             # assert false
-            self.psDataManager.add_data(
+            self.PsDataManager.add_data(
                 udir,
                 ("cost_breakdown", "INDIRECT", "INDIRECT_TOTAL"),
-                psData(
+                PsData(
                     "indirect_cost",
                     "cost_tool",
                     indirect_cost.magnitude,
@@ -283,10 +283,10 @@ class psCosting:
                     data_label="Annual cost",
                 ),
             )
-            self.psDataManager.add_data(
+            self.PsDataManager.add_data(
                 udir,
                 ("cost_breakdown", "INDIRECT", "levelized", "INDIRECT_TOTAL"),
-                psData(
+                PsData(
                     "levelized_indirect_cost",
                     "cost_tool",
                     sum_levelized_indirect.magnitude,
@@ -312,10 +312,10 @@ class psCosting:
                     )
 
     def get_global_cost(self, udir):
-        udir = self.psDataManager._dir_to_tuple(udir)
+        udir = self.PsDataManager._dir_to_tuple(udir)
         self.global_costs = {}
         for key in self.loaded_costing_pars:
-            data = self.psDataManager.get_data(udir, key)
+            data = self.PsDataManager.get_data(udir, key)
             self.global_costs[
                 key.replace("{}.".format(self.default_costing_block), "")
             ] = data.udata
@@ -335,7 +335,7 @@ class psCosting:
 
     def get_device_cost(self, device_keys, udir, cost_type, block_name=None):
         data_sum = None
-        udir = self.psDataManager._dir_to_tuple(udir)
+        udir = self.PsDataManager._dir_to_tuple(udir)
         # print("import request", device_keys, cost_type)
         # print(device_keys, self.costed_devices)
         # assert False
@@ -359,7 +359,7 @@ class psCosting:
                         if get_data:
                             # print(block_name,fs_device, d_key)
                             try:
-                                sdata = self.psDataManager.get_data(udir, d_key)
+                                sdata = self.PsDataManager.get_data(udir, d_key)
                                 if "USD" not in sdata.sunits:
                                     data = sdata.udata.rescale(qs.W)
                                     data = data * qs.year
@@ -489,7 +489,7 @@ class psCosting:
                         self.costing_block_keys.append(key)
         # for dev, items in self.costed_devices.items():
         #     print(dev, items)
-        # print(self.psDataManager.keys())
+        # print(self.PsDataManager.keys())
 
         _logger.info("Found costing block keys {}".format(self.costing_block_keys))
         # _logger.info("Found costing device keys {}".format(self.costed_devices))

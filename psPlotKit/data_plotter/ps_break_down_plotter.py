@@ -10,7 +10,7 @@ __author__ = "Alexander V. Dudchenko (SLAC)"
 class breakDownPlotter:
     def __init__(
         self,
-        psData,
+        PsData,
         save_location=None,
         save_folder=None,
         save_name=None,
@@ -20,7 +20,7 @@ class breakDownPlotter:
         self.save_location = create_save_location(save_location, save_folder)
         self.show_figs = show_figs
         self.select_data_key_list = []
-        self.psData = psData
+        self.PsData = PsData
         self.define_plot_styles()
         self.line_indexes = {}
         self.line_groups = None
@@ -33,8 +33,8 @@ class breakDownPlotter:
         self.area_groups = {}
 
     def _select_data(self, xkeys, ykeys):
-        self.psData.select_data(xkeys, require_all_in_dir=False)
-        self.psData.select_data(ykeys, add_to_existing=True, require_all_in_dir=False)
+        self.PsData.select_data(xkeys, require_all_in_dir=False)
+        self.PsData.select_data(ykeys, add_to_existing=True, require_all_in_dir=False)
 
     def define_hatch_groups(self, groups=None):
         self.hatch_groups = groups
@@ -234,7 +234,7 @@ class breakDownPlotter:
     ):
 
         self._select_data(xdata, ydata)
-        self.selected_data = self.psData.get_selected_data()
+        self.selected_data = self.PsData.get_selected_data()
         self.selected_data.display()
         self.generate_groups_lines = self._get_group_options(
             self.selected_data.keys(), xdata, ydata

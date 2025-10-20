@@ -8,12 +8,12 @@ __author__ = "Alexander V. Dudchenko (SLAC)"
 
 class mapPlotter:
     def __init__(
-        self, psData, save_location="", save_folder=None, save_name=None, show_figs=True
+        self, PsData, save_location="", save_folder=None, save_name=None, show_figs=True
     ):
         self.save_location = create_save_location(save_location, save_folder)
         self.show_figs = show_figs
         self.select_data_key_list = []
-        self.psData = psData
+        self.PsData = PsData
         self.zunit = None
         self.xunit = None
         self.yunit = None
@@ -24,7 +24,7 @@ class mapPlotter:
         self.data_index_to_label = {}
 
     def _select_data(self, keys):
-        self.psData.select_data(keys, require_all_in_dir=False)
+        self.PsData.select_data(keys, require_all_in_dir=False)
 
     def _get_axis_label(self, label, units):
         return "{} ({})".format(label, units)
@@ -41,9 +41,9 @@ class mapPlotter:
         fig_options=None,
         plot_options=None,
     ):
-        self.xdata = self.psData.get_data(data_dir, xdata)
-        self.ydata = self.psData.get_data(data_dir, ydata)
-        self.zdata = self.psData.get_data(data_dir, zdata)
+        self.xdata = self.PsData.get_data(data_dir, xdata)
+        self.ydata = self.PsData.get_data(data_dir, ydata)
+        self.zdata = self.PsData.get_data(data_dir, zdata)
 
         if zlevels is None:
             self.zlevels = np.linspace(

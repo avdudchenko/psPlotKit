@@ -1,6 +1,6 @@
 import pytest
 import os
-from psPlotKit.data_manager.data_importer import psDataImport
+from psPlotKit.data_manager.data_importer import PsDataImport
 
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
@@ -9,12 +9,12 @@ _this_file_path = os.path.dirname(os.path.abspath(__file__))
 
 @pytest.fixture
 def get_data():
-    return psDataImport(os.path.join(_this_file_path, "test_file.h5"))
+    return PsDataImport(os.path.join(_this_file_path, "test_file.h5"))
 
 
 def test_data_importer(get_data):
     datamanager = (
-        get_data  # psDataImport(os.path.join(_this_file_path, "test_file.h5"))
+        get_data  # PsDataImport(os.path.join(_this_file_path, "test_file.h5"))
     )
     expected_dirs = [
         "ro_analysis/erd_type/pressure_exchanger/membrane_cost",

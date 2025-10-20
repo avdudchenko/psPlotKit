@@ -6,12 +6,12 @@ __author__ = "Alexander V. Dudchenko (SLAC)"
 
 class linePlotter:
     def __init__(
-        self, psData, save_location="", save_folder=None, save_name=None, show_figs=True
+        self, PsData, save_location="", save_folder=None, save_name=None, show_figs=True
     ):
         self.save_location = create_save_location(save_location, save_folder)
         self.show_figs = show_figs
         self.select_data_key_list = []
-        self.psData = psData
+        self.PsData = PsData
         self.define_line_colors()
         self.line_indexes = {}
         self.line_groups = {}
@@ -23,8 +23,8 @@ class linePlotter:
         self.data_index_to_label = {}
 
     def _select_data(self, xdata, ydata):
-        self.psData.select_data(xdata, require_all_in_dir=False)
-        self.psData.select_data(ydata, require_all_in_dir=False, add_to_existing=True)
+        self.PsData.select_data(xdata, require_all_in_dir=False)
+        self.PsData.select_data(ydata, require_all_in_dir=False, add_to_existing=True)
 
     def define_line_groups(self, line_groups=None):
         self.line_groups = line_groups
@@ -268,7 +268,7 @@ class linePlotter:
     ):
 
         self._select_data(xdata, ydata)
-        self.selected_data = self.psData.get_selected_data()
+        self.selected_data = self.PsData.get_selected_data()
         self.selected_data.display()
         self.generate_groups_lines = self._get_group_options(
             self.selected_data.keys(), xdata, ydata

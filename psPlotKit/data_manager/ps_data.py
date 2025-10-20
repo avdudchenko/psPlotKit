@@ -6,12 +6,12 @@ import copy
 
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
-_logger = logger.define_logger(__name__, "psdata", level="INFO")
+_logger = logger.define_logger(__name__, "PsData", level="INFO")
 import time
 import datetime
 
 
-class psData:
+class PsData:
     def __init__(
         self,
         data_key,
@@ -30,15 +30,15 @@ class psData:
         conversions will be performed on raw and unit specific data if requested
         access data as follows
 
-        psData.data - return raw numpy array
-        psData.udata - return np array with units
-        psData.data_feasible - returns only feasible data
-        psData.udata_feasible - returns only feasible data with units
+        PsData.data - return raw numpy array
+        PsData.udata - return np array with units
+        PsData.data_feasible - returns only feasible data
+        PsData.udata_feasible - returns only feasible data with units
 
         to convert units
-        psData.convert_units('new_unit')
+        PsData.convert_units('new_unit')
         to assigne any unit
-        psData.assign_units(new_unit,manual_conversion_factor)
+        PsData.assign_units(new_unit,manual_conversion_factor)
         """
         t = time.time()
         self._define_custom_units()
@@ -248,3 +248,7 @@ class psData:
             data_dict["units"] = self.sunits
             data_dict["values"] = self.data.tolist()
         return data_dict
+
+
+class psData(PsData):
+    _logger.warning("psData is deprecated, please use PsData")

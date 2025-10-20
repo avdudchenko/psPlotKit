@@ -1,9 +1,9 @@
 from psPlotKit.data_plotter.ps_break_down_plotter import breakDownPlotter
 from psPlotKit.data_plotter.ps_line_plotter import linePlotter
-from psPlotKit.data_manager.ps_data_manager import psDataManager
+from psPlotKit.data_manager.ps_data_manager import PsDataManager
 
 if __name__ == "__main__":
-    costing_data = psDataManager("data/bgw_analysis_analysisType_bgw_analysis.h5")
+    costing_data = PsDataManager("data/bgw_analysis_analysisType_bgw_analysis.h5")
     # costing_data.get_costing_block_data()
     device_groups = {
         "RO": {"units": "ROUnits"},
