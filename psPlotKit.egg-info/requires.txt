@@ -1,7 +1,0 @@
-sigfig
-h5py
-quantities
-matplotlib
-pyyaml
-scipy
-numpy<2.0.0
