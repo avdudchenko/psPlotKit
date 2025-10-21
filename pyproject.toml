@@ -1,0 +1,20 @@
+[build-system]
+requires = [
+    "setuptools >= 64",
+    "setuptools_scm >= 7",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "psPlotKit"
+readme = "README.md"
+dynamic = ["version"]
+dependencies = [
+    "sigfig",
+    "h5py",
+    "quantities",
+    "matplotlib",
+    "pyyaml",
+    "scipy",
+    "numpy<2.0.0",
+]
