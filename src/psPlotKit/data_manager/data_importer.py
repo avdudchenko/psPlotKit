@@ -149,7 +149,7 @@ class PsDataImport:
                         ka.append(key_arr[i])
                     ka = np.array(ka, dtype=str)
                     for row in ka.T:
-                        uq_dirs = np.unique(row)
+                        uq_dirs = np.unique(row).tolist()
                         if len(uq_dirs) > 1:
                             unique_dir = unique_dir + list(uq_dirs)
                 used_dir_keys = []
