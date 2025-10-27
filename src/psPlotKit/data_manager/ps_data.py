@@ -11,6 +11,16 @@ import time
 import datetime
 
 
+class CustomUnits:
+    def __init__(self):
+        self.USD = qs.UnitQuantity("USD")
+        self.PPM = qs.UnitQuantity("PPM", qs.g / qs.m**3, symbol="PPM")
+        self.custom_units = {"USD": self.USD, "PPM": self.PPM}
+
+    def get_units_dict(self):
+        return self.custom_units
+
+
 class PsData:
     def __init__(
         self,
@@ -23,7 +33,8 @@ class PsData:
         assign_units=None,
         conversion_factor=1,
         data_label=None,
-        **kwargs
+        custom_units=None,
+        **kwargs,
     ):
         """
         This defines base ps data class and will store raw data and data with units
@@ -40,8 +51,7 @@ class PsData:
         to assigne any unit
         PsData.assign_units(new_unit,manual_conversion_factor)
         """
-        t = time.time()
-        self._define_custom_units()
+        self._define_custom_units(custom_units)
         self.data_key = data_key
         self.data_type = data_type
         self._convert_iso_to_epoch = False
@@ -64,7 +74,6 @@ class PsData:
                 self.data_is_numbers = False
         self.raw_data = data_array.copy()
         self.data = data_array.copy()
-        # if feasible_indexes is None:
         self.feasible_indexes = feasible_indexes
         self._assign_units()
         self.key_index = None
@@ -73,6 +82,24 @@ class PsData:
             self.assign_units(assign_units, conversion_factor)
         if units != None:
             self.to_units(units)
+
+    def get_data(self, exclude_nan_values=False):
+        if exclude_nan_values:
+            return self.data[~np.isnan(self.data)]
+        else:
+            return self.data
+
+    def get_raw_data(self, exclude_nan_values=False):
+        if exclude_nan_values:
+            return self.raw_data[~np.isnan(self.raw_data)]
+        else:   
+            return self.raw_data
+
+    def get_feasible_data(self):
+        if self.feasible_indexes is not None:
+            return self.data[self.feasible_indexes]
+        else:
+            return self.data
 
     def mask_data(self, user_filter=None, feasible_only=False):
         """will reduce data with provided filter
@@ -125,10 +152,10 @@ class PsData:
                 reduced_data.append(np.nan)
         return np.array(reduced_data)
 
-    def _define_custom_units(self):
-        self.USD = qs.UnitQuantity("USD")
-        self.PPM = qs.UnitQuantity("PPM", qs.g / qs.m**3, symbol="PPM")
-        self.custom_units = {"USD": self.USD, "PPM": self.PPM}
+    def _define_custom_units(self, custom_units=None):
+        if custom_units is None:
+            custom_units = CustomUnits()
+        self.custom_units = custom_units.get_units_dict()
 
     def _assign_units(self, manual_conversion=1):
         if self.data_is_numbers:
@@ -168,7 +195,6 @@ class PsData:
                 self.custom_units[self.sunits] = qs.UnitQuantity(self.sunits)
                 qsunits = self.custom_units[self.sunits]
         else:
-
             qsunits = self.custom_units[self.sunits]
         return qsunits
 
@@ -228,8 +254,11 @@ class PsData:
         self.sunits = self._convert_string_unit(assigned_units)
         self._assign_units(manual_conversion=manual_conversion_factor)
 
-    def display_data(self):
-        _logger.info("Raw data: {}, units {}".format(self.udata))
+    def display(self):
+        _logger.info("Data: {}, units {}".format(self.data, self.sunits))
+
+    def display_raw_data(self):
+        _logger.info("Raw data: {}, units {}".format(self.uraw_data, self.sunits))
 
     def _iso_to_epoch(self, data):
         # data_time = map(data, datetime.time.fromisoformat)

@@ -138,14 +138,14 @@ class PsDataManager(dict):
     def display_keys(self):
         """func to show data keys content in a clean manner"""
         _logger.info("---Displaying current data content---")
-        for data in list(self.data_keys()):
+        for data in list(self.data_keys):
             _logger.info("data_key: {}".format(data))
         _logger.info("-----------Contents end----------")
 
     def display_directories(self):
         """func to show directories content in a clean manner"""
         _logger.info("---Displaying current data content---")
-        for data in list(self.directory_keys()):
+        for data in list(self.directory_keys):
             _logger.info("data_key: {}".format(data))
         _logger.info("-----------Contents end----------")
 
@@ -266,7 +266,7 @@ class PsDataManager(dict):
         self,
         selected_keys,
         require_all_in_dir=True,
-        exact_keys=False,
+        exact_keys=True,
         add_to_existing=False,
     ):
         if isinstance(selected_keys, str):
@@ -348,6 +348,10 @@ class PsDataManager(dict):
             data_keys = self.data_keys[:]
         return data_keys
 
+    def display_loaded_contents(self):
+        for instance in self.PsDataImportInstances:
+            instance.display_loaded_contents()
+
     def normalize_data(self, base_value_dict, norm_units="%", related_keys=None):
         def get_nearest_vals(data, base_value):
             delta = np.abs(data - base_value)
@@ -359,11 +363,12 @@ class PsDataManager(dict):
             if isinstance(related_keys, (str, tuple)):
                 related_keys = [related_keys]
         for key, base_value in base_value_dict.items():
-            select_key = self.select_data([key])
+            select_key = self.select_data([key], exact_keys=True)
             for skey in select_key:
                 data = self[skey].data
                 norm_data = (data - base_value) / base_value
                 base_skey = list(skey)
+                print(base_skey, key)
                 base_skey.remove(key)
                 norm_base_skey = base_skey[:]
                 norm_base_skey.append(self.normalized_data)
@@ -382,9 +387,8 @@ class PsDataManager(dict):
                     idx = np.where(data == base_value)[0]
                     if len(idx) == 0:
                         _logger.info(
-                            "Could not find exact base value using interpolation on {} {}".format(
-                                base_skey,
-                                related_key,
+                            "Could not find exact base value using interpolation on {} {} as input was {} and base value is {}".format(
+                                base_skey, related_key, data, base_value
                             )
                         )
                         nearest_idxs = get_nearest_vals(data, base_value)
@@ -444,7 +448,7 @@ class PsDataManager(dict):
         used to perform math operations on imported data, will result of eval as new data set
             directory: the directory in which to save data
             name : name of new data set
-            function : string that describes operations (e.g. np.sum(x)+10*y)
+            function : a python function that takes in keys in the function_dict as inputs
             function_dict : dictionary that connects variables keys in data set to variables in function
                 Dictionary must contain the variable in the function, and keys relevant to dictionary, can be single key or a list of keys
                 optionally pass in "units" key to specify which units the data should be converted to before operation
@@ -470,27 +474,28 @@ class PsDataManager(dict):
             return d
 
         _function_dict = {}
-        _function = copy.copy(function)
         for key, data_keys in function_dict.items():
-
-            if isinstance(data_keys["keys"], list):
-                data = []
-                for k in data_keys["keys"]:
-                    data.append(
-                        np.array(get_dim_data(k, to_units=data_keys.get("units")))
-                    )
+            print(key, data_keys)
+            if isinstance(data_keys, dict) == False:
+                data = np.array(get_dim_data(data_keys))
             else:
-                data = np.array(
-                    get_dim_data(data_keys["keys"], to_units=data_keys.get("units"))
-                )
+                if isinstance(data_keys["keys"], list):
+                    data = []
+                    for k in data_keys["keys"]:
+                        data.append(
+                            np.array(get_dim_data(k, to_units=data_keys.get("units")))
+                        )
+                else:
+                    data = np.array(
+                        get_dim_data(data_keys["keys"], to_units=data_keys.get("units"))
+                    )
             _function_dict[key] = np.array(data)
-        _function_dict["np"] = np
         _logger.info(
             "Evaluating function: {}, new dir and key {} {}".format(
                 function, directory, name
             )
         )
-        result_data = eval(_function, _function_dict)
+        result_data = function(**_function_dict)
         self.add_data(
             directory,
             name,
@@ -608,11 +613,7 @@ class PsDataManager(dict):
                     ia[:] = idxs[i]
                     temp_map_idxs.append(ia)
                     map_units.append(data.sunits)
-                # print(
-                #     self.global_reduction_directory,
-                #     self.global_reduction_directory.get(uq),
-                #     pad_missing_data,
-                # )
+
                 if (
                     self.global_reduction_directory is not None
                     and self.global_reduction_directory.get(uq) is not None
@@ -748,115 +749,115 @@ class PsDataManager(dict):
             self.stack_all_data(stack_keys, pad_missing_data)
         self.mask_data = mask_data
 
-    def get_diff(
-        self,
-        key,
-        return_absolute=False,
-        return_relative=True,
-        diff_loc="differential_idx",
-        diff_key="differential_idx",
-        nom_loc="nominal_idx",
-        nom_key="nominal_idx",
-        filter_nans=True,
-        data_key_list=None,
-        directories=None,
-        exact_keys=False,
-        num_keys=None,
-        match_accuracy=0.9,
-    ):
+    # def get_diff(
+    #     self,
+    #     key,
+    #     return_absolute=False,
+    #     return_relative=True,
+    #     diff_loc="differential_idx",
+    #     diff_key="differential_idx",
+    #     nom_loc="nominal_idx",
+    #     nom_key="nominal_idx",
+    #     filter_nans=True,
+    #     data_key_list=None,
+    #     directories=None,
+    #     exact_keys=False,
+    #     num_keys=None,
+    #     match_accuracy=0.9,
+    # ):
 
-        for instance in self.PsDataImportInstances:
-            instance.get_data(
-                data_key_list=data_key_list,
-                directories=directories,
-                num_keys=num_keys,
-                exact_keys=exact_keys,
-                match_accuracy=match_accuracy,
-                PsDataManager=self,
-            )
+    #     for instance in self.PsDataImportInstances:
+    #         instance.get_data(
+    #             data_key_list=data_key_list,
+    #             directories=directories,
+    #             num_keys=num_keys,
+    #             exact_keys=exact_keys,
+    #             match_accuracy=match_accuracy,
+    #             PsDataManager=self,
+    #         )
 
-            sweep_reference_raw = instance._get_data_set(
-                nom_key,
-                main_loc=nom_loc,
-                sub_key="value",
-            )
+    #         sweep_reference_raw = instance._get_data_set(
+    #             nom_key,
+    #             main_loc=nom_loc,
+    #             sub_key="value",
+    #         )
 
-            sweep_reference = np.array(
-                sweep_reference_raw[sweep_reference_raw == sweep_reference_raw],
-                dtype=int,
-            )
+    #         sweep_reference = np.array(
+    #             sweep_reference_raw[sweep_reference_raw == sweep_reference_raw],
+    #             dtype=int,
+    #         )
 
-            diff_reference_raw = instance._get_data_set(
-                diff_key,
-                main_loc=diff_loc,
-                sub_key="value",
-            )
+    #         diff_reference_raw = instance._get_data_set(
+    #             diff_key,
+    #             main_loc=diff_loc,
+    #             sub_key="value",
+    #         )
 
-            absolute_data = instance._get_data_set(
-                key,
-                main_loc="outputs",
-                sub_key="value",
-            )
+    #         absolute_data = instance._get_data_set(
+    #             key,
+    #             main_loc="outputs",
+    #             sub_key="value",
+    #         )
 
-            delta_result = np.zeros(diff_reference_raw.shape) * np.nan
+    #         delta_result = np.zeros(diff_reference_raw.shape) * np.nan
 
-            for i in sweep_reference:
-                sweep_idx = np.where(i == sweep_reference_raw)[0][0]
-                diff_idx = np.where(i == diff_reference_raw)[0]  # [0]
-                if return_absolute:
-                    delta_result[diff_idx] = (
-                        absolute_data[diff_idx] - absolute_data[sweep_idx]
-                    )
-                elif return_relative:
-                    # NOTE This assumes a decrease is a good this. Which works for LCOW, but may not work for all data.
-                    delta_result[diff_idx] = (
-                        (absolute_data[sweep_idx] - absolute_data[diff_idx])
-                        / absolute_data[sweep_idx]
-                        * 100
-                    )
-                else:
-                    # NOTE If an increase is a good thing, then this is correct. Regardless, this relative change is difficult to handle and VOI will be forced positive in get_voi
-                    delta_result[diff_idx] = (
-                        (absolute_data[diff_idx] - absolute_data[sweep_idx])
-                        / absolute_data[diff_idx]
-                        * 100
-                    )
+    #         for i in sweep_reference:
+    #             sweep_idx = np.where(i == sweep_reference_raw)[0][0]
+    #             diff_idx = np.where(i == diff_reference_raw)[0]  # [0]
+    #             if return_absolute:
+    #                 delta_result[diff_idx] = (
+    #                     absolute_data[diff_idx] - absolute_data[sweep_idx]
+    #                 )
+    #             elif return_relative:
+    #                 # NOTE This assumes a decrease is a good this. Which works for LCOW, but may not work for all data.
+    #                 delta_result[diff_idx] = (
+    #                     (absolute_data[sweep_idx] - absolute_data[diff_idx])
+    #                     / absolute_data[sweep_idx]
+    #                     * 100
+    #                 )
+    #             else:
+    #                 # NOTE If an increase is a good thing, then this is correct. Regardless, this relative change is difficult to handle and VOI will be forced positive in get_voi
+    #                 delta_result[diff_idx] = (
+    #                     (absolute_data[diff_idx] - absolute_data[sweep_idx])
+    #                     / absolute_data[diff_idx]
+    #                     * 100
+    #                 )
 
-            if filter_nans:
-                return delta_result[delta_result == delta_result]
-            else:
-                return delta_result
+    #         if filter_nans:
+    #             return delta_result[delta_result == delta_result]
+    #         else:
+    #             return delta_result
 
-    def get_voi(self, yaml_file=None):
-        """
-        Calculate the Value of Information (VOI) based on LCOW and performance parameters from a YAML file.
-        This can be done better but this is a quick and dirty implementation.
-        """
-        yaml_file = yaml.safe_load(open(yaml_file, "r"))
+    # def get_voi(self, yaml_file=None):
+    #     """
+    #     Calculate the Value of Information (VOI) based on LCOW and performance parameters from a YAML file.
+    #     This can be done better but this is a quick and dirty implementation.
+    #     """
+    #     yaml_file = yaml.safe_load(open(yaml_file, "r"))
 
-        # Get the top-level key from the YAML file
-        tree_top = list(yaml_file.keys())[0]
-        # Get the list of sweep parameters from the YAML file
-        sweeps = list(yaml_file[tree_top]["diff_param_loop"].keys())[:-1]
+    #     # Get the top-level key from the YAML file
+    #     tree_top = list(yaml_file.keys())[0]
+    #     # Get the list of sweep parameters from the YAML file
+    #     sweeps = list(yaml_file[tree_top]["diff_param_loop"].keys())[:-1]
 
-        results_dict = {}
-        for sweep in sweeps:
-            results_dict[sweep] = {}
-            param = yaml_file[tree_top]["diff_param_loop"][sweep]["param"]
-            del_lcow = self.get_diff(
-                "fs.costing.LCOW", directories=sweep, return_relative=True
-            )
-            del_performance = self.get_diff(
-                param, directories=sweep, return_relative=False, return_absolute=False
-            )
-            voi = del_lcow / del_performance
-            if np.all(voi < 0):
-                voi = np.abs(voi)
-            results_dict[sweep]["fs.costing.LCOW"] = del_lcow
-            results_dict[sweep][param] = del_performance
-            results_dict[sweep]["VOI"] = voi
+    #     results_dict = {}
+    #     for sweep in sweeps:
+    #         results_dict[sweep] = {}
+    #         param = yaml_file[tree_top]["diff_param_loop"][sweep]["param"]
+    #         del_lcow = self.get_diff(
+    #             "fs.costing.LCOW", directories=sweep, return_relative=True
+    #         )
+    #         del_performance = self.get_diff(
+    #             param, directories=sweep, return_relative=False, return_absolute=False
+    #         )
+    #         voi = del_lcow / del_performance
+    #         if np.all(voi < 0):
+    #             voi = np.abs(voi)
+    #         results_dict[sweep]["fs.costing.LCOW"] = del_lcow
+    #         results_dict[sweep][param] = del_performance
+    #         results_dict[sweep]["VOI"] = voi
 
-        return results_dict
+    #     return results_dict
 
 
 class psDataManager(PsDataManager):

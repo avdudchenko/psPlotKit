@@ -4,7 +4,7 @@ import glob
 import copy
 import re
 from psPlotKit.util import logger
-from psPlotKit.data_manager.ps_data import PsData
+from psPlotKit.data_manager.ps_data import PsData, CustomUnits
 import difflib
 import time
 import json
@@ -53,6 +53,7 @@ class PsDataImport:
         self.search_cut_off = 0.6
         """ number of near keys to return """
         self.num_keys = 1
+        self.custom_units = CustomUnits()
 
     def _perform_data_tests(self, directory_contents):
         termination_test = any(
@@ -204,6 +205,7 @@ class PsDataImport:
     def get_directory_contents(self):
         self.sub_contents = []
         self.unique_data_keys = []
+        t = time.time()
         for d in self.file_index:
             _logger.info(f"Getting directory contents for {d}")
             file_data = self._get_raw_data_contents(d)
@@ -211,17 +213,18 @@ class PsDataImport:
             for k, sub_data in file_data.items():
                 if hasattr(sub_data, "keys"):
                     _, data_test = self._perform_data_tests(sub_data)
-                    ts = time.time()
+
                     if termination_test:
+
                         if k not in self.sub_contents:
                             self.sub_contents.append(k)
                         if k not in self.file_index[d]:
                             self.file_index[d][k] = {}
                             self.file_index[d][k]["data_keys"] = []
-                        for key in sub_data.keys():
-                            self.file_index[d][k]["data_keys"].append(key)
-                            if key not in self.unique_data_keys:
-                                self.unique_data_keys.append(key)
+                        if len(sub_data.keys()) > 0:
+                            self.file_index[d][k]["data_keys"] += list(sub_data.keys())
+                            self.unique_data_keys += list(sub_data.keys())
+
                     elif data_test:
                         if "data_keys" not in self.file_index[d]:
                             self.file_index[d]["data_keys"] = []
@@ -239,6 +242,10 @@ class PsDataImport:
             _logger.info("Unique data keys found {}".format(self.unique_data_keys))
         else:
             _logger.info("Data types found: {}".format(self.sub_contents))
+            _logger.info(
+                "Unique data keys found: {}".format(len(self.unique_data_keys))
+            )
+        _logger.info("Getting data types took: {}".format(time.time() - t))
 
     def get_selected_directories(self, directory_keys):
         t = time.time()
@@ -253,6 +260,15 @@ class PsDataImport:
                     _logger.info("User selected {}".format(d))
             _logger.debug("get_selected_directories took: {}".format(time.time() - t))
             return selected_directories
+
+    def test_if_in_directory(self, directory, directory_keys):
+        if directory_keys is None:
+            return True
+        else:
+            if any(sdk in directory for sdk in directory_keys):
+                return True
+            else:
+                return False
 
     def get_data(
         self,
@@ -307,25 +323,29 @@ class PsDataImport:
             data_dict = {}
         selected_directories = self.get_selected_directories(directories)
         for directory in selected_directories:
-
             unique_labels = self.file_index[directory]["unique_directory"]
             for dkl in data_key_list:
                 if isinstance(dkl, dict):
                     key = dkl["filekey"]
                     return_key = dkl["return_key"]
                     directories = dkl.get("directories", None)
+                    # assert False
                     import_options = dkl
                 else:
                     key = dkl
                     return_key = None
                     import_options = {}
-                if directories is None or directory in directories:
+                if directories is None or self.test_if_in_directory(
+                    directories, unique_labels
+                ):
                     data_keys, data_type = self._get_nearest_key(
                         directory, key, exact_keys
                     )
-
+                else:
+                    data_keys = None
                 if data_keys != None:
                     for i, dk in enumerate(data_keys):
+                        t = time.time()
                         data = self._get_data_set_auto(
                             directory, data_type, dk, data_object_options=import_options
                         )
@@ -377,7 +397,6 @@ class PsDataImport:
         self, directory, data_type, data_key, data_object_options={}
     ):
         self._get_data(directory)
-        t = time.time()
         units = "dimensionless"
         data = None
 
@@ -417,7 +436,6 @@ class PsDataImport:
             data, units = _get_data_from_file(data_type, data_key)
         if units == "None":
             units = "dimensionless"
-        # print(data_key, data, units)
         if isinstance(data, (np.ndarray, list)):
             if len(data) == 0:
                 raise ValueError(
@@ -426,8 +444,6 @@ class PsDataImport:
                     )
                 )
             result = data
-            _logger.debug("_get_data_set_auto took: {}".format(time.time() - t))
-            t = time.time()
             idx, idx_str = self.get_key_indexes(data_key)
             try:
                 data_object = PsData(
@@ -436,6 +452,7 @@ class PsDataImport:
                     result,
                     units,
                     self.get_feasible_idxs(data=result),
+                    custom_units=self.custom_units,
                     **data_object_options,
                 )
                 data_object.key_index = idx
@@ -482,6 +499,14 @@ class PsDataImport:
             near_keys = get_key(data_key, available_keys)
             data_type = None
         return near_keys, data_type
+
+    def display_loaded_contents(self):
+        _logger.info("---Displaying loaded data contents---")
+        for d in self.file_index:
+            _logger.info("Directory: {}".format(d))
+        _logger.info("---Displaying available keys across all directories---")
+        for key in self.unique_data_keys:
+            _logger.info("Data key: {}".format(key))
 
     def _get_raw_data_contents(self, d):
         if self.h5_mode:

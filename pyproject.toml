@@ -16,5 +16,5 @@ dependencies = [
     "matplotlib",
     "pyyaml",
     "scipy",
-    "numpy<2.0.0",
+    "numpy",
 ]
