@@ -78,6 +78,8 @@ class MapPlotter:
             self.axis_options["zlabel"] = self._get_axis_label(
                 self.zdata.data_label, self.zdata.mpl_units
             )  # all lines shold share units
+        if self.axis_options.get("zformat") == None:
+            zformat = self.axis_options["zformat"]
         self.plot_imported_data(fig_options)
         if generate_plot:
             self.generate_figure(zformat)
