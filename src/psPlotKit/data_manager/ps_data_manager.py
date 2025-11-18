@@ -155,6 +155,7 @@ class PsDataManager(dict):
         costing_block="fs.costing",
         costing_key="costing",
         default_flow="fs.product.properties[0.0].flow_vol_phase[Liq]",
+        work_keys=["control_volume.work[0.0]"],
         include_indirect_in_device_costs=True,
     ):
         for instance in self.PsDataImportInstances:

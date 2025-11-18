@@ -15,13 +15,14 @@ class PsCosting:
         costing_block="fs.costing",
         costing_key="costing",
         default_flow="fs.product.properties[0.0].flow_vol_phase[Liq]",
+        work_keys=["control_volume.work[0.0]"],
         include_indirect_in_device_costs=True,
     ):
         self.default_costing_block = costing_block
         self.costing_key = costing_key
         self.psManager = psManager
         self.default_flow = default_flow
-        self.define_device_energy_pars()
+        self.define_device_energy_pars(work_keys)
         self.default_costing()
         self.USD = qs.UnitQuantity("USD")
         self.fixed_operating_cost_ref = ["fixed_operating_cost"]
@@ -44,8 +45,8 @@ class PsCosting:
             "LCOW": {"assign_units": "USD/m**3"},
         }
 
-    def define_device_energy_pars(self, device_dict=None):
-        self.default_device_work_keys = ["control_volume.work[0.0]"]
+    def define_device_energy_pars(self, work_keys):
+        self.default_device_work_keys = work_keys
 
     def define_groups(self, groups):
         self.costed_groups = {}
