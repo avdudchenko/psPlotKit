@@ -45,6 +45,7 @@ class MapPlotter:
         generate_plot=True,
         fig_options=None,
         plot_options=None,
+        zformat=1,
     ):
         self.xdata = self.PsData.get_data(data_dir, xdata)
         self.ydata = self.PsData.get_data(data_dir, ydata)
@@ -79,7 +80,7 @@ class MapPlotter:
             )  # all lines shold share units
         self.plot_imported_data(fig_options)
         if generate_plot:
-            self.generate_figure()
+            self.generate_figure(zformat)
 
     def plot_imported_data(self, opts):
         if opts is not None:
@@ -100,8 +101,10 @@ class MapPlotter:
             **self.plot_options
         )
 
-    def generate_figure(self):
-        self.fig.add_colorbar(self.axis_options["zlabel"], zticks=self.zlevels)
+    def generate_figure(self, zformat=1):
+        self.fig.add_colorbar(
+            self.axis_options["zlabel"], zticks=self.zlevels, zformat=zformat
+        )
         self.fig.set_axis_ticklabels(**self.axis_options)
 
         if self.save_name == None:
