@@ -248,8 +248,8 @@ class PsData:
         qsunits = self._get_qs_unit()
         if new_units == "degC" and str(self.udata.units) == "1.0 K":
             self.udata = qs.Quantity(self.udata.magnitude[:] - 273.15, new_units)
-
-        self.udata = self.udata.rescale(qsunits)
+        else:
+            self.udata = self.udata.rescale(qsunits)
         self.uraw_data = self.uraw_data.rescale(qsunits)
         self.data = self.udata.magnitude[:]
         self.raw_data = self.uraw_data.magnitude
