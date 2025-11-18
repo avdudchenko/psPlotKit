@@ -46,6 +46,8 @@ class PsCosting:
         }
 
     def define_device_energy_pars(self, work_keys):
+        if isinstance(work_keys, str):
+            work_keys = [work_keys]
         self.default_device_work_keys = work_keys
 
     def define_groups(self, groups):
