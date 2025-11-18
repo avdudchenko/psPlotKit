@@ -273,6 +273,17 @@ class PsCosting:
                         data_label="LCOW",
                     ),
                 )
+            self.PsDataManager.add_data(
+                udir,
+                ("cost_breakdown", "CALCULATED", "levelized", "TOTAL_LCOW"),
+                PsData(
+                    "levelized_total",
+                    "cost_tool",
+                    sum_ltotal,
+                    "USD/m**3",
+                    data_label="LCOW",
+                ),
+            )
             # print(sum_total_indirect.magnitude)
             # assert false
             self.PsDataManager.add_data(
@@ -298,7 +309,16 @@ class PsCosting:
                 ),
             )
             if len(sum_ltotal[sum_lcapex == sum_lcapex]) > 1:
-                error = np.nanmax(np.abs(self.global_costs["LCOW"] - sum_ltotal)) > 0.01
+                error = (
+                    np.nanmax(
+                        np.abs(
+                            (self.global_costs["LCOW"] - sum_ltotal)
+                            / self.global_costs["LCOW"]
+                        )
+                        * 100
+                    )
+                    > 0.01
+                )
                 if error:
                     _logger.warning("Manually calculated LCOW differs from h5 LCOW!")
                     _logger.warning(

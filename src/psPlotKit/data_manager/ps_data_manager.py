@@ -164,6 +164,7 @@ class PsDataManager(dict):
                 costing_block=costing_block,
                 costing_key=costing_key,
                 default_flow=default_flow,
+                work_keys=work_keys,
                 include_indirect_in_device_costs=include_indirect_in_device_costs,
             )
             costing_tool.define_groups(costing_groups)
