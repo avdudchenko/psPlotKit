@@ -92,7 +92,7 @@ class PsData:
     def get_raw_data(self, exclude_nan_values=False):
         if exclude_nan_values:
             return self.raw_data[~np.isnan(self.raw_data)]
-        else:   
+        else:
             return self.raw_data
 
     def get_feasible_data(self):
@@ -242,8 +242,13 @@ class PsData:
         self.raw_data = data
 
     def to_units(self, new_units):
+
         self.sunits = self._convert_string_unit(new_units)
+
         qsunits = self._get_qs_unit()
+        if new_units == "degC" and str(self.udata.units) == "1.0 K":
+            self.udata = qs.Quantity(self.udata.magnitude[:] - 273.15, new_units)
+
         self.udata = self.udata.rescale(qsunits)
         self.uraw_data = self.uraw_data.rescale(qsunits)
         self.data = self.udata.magnitude[:]
