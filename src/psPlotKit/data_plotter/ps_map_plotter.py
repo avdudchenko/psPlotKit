@@ -13,10 +13,10 @@ _logger = logger.define_logger(__name__, "MapPlotter", level="INFO")
 
 class MapPlotter:
     def __init__(
-        self, PsData, save_location="", save_folder=None, save_name=None, show_figs=True
+        self, PsData, save_location="", save_folder=None, save_name=None, show_fig=True
     ):
         self.save_location = create_save_location(save_location, save_folder)
-        self.show_figs = show_figs
+        self.show_fig = show_fig
         self.select_data_key_list = []
         self.PsData = PsData
         self.zunit = None
@@ -78,14 +78,20 @@ class MapPlotter:
             self.axis_options["zlabel"] = self._get_axis_label(
                 self.zdata.data_label, self.zdata.mpl_units
             )  # all lines shold share units
-        print(self.axis_options)
+
         if self.axis_options.get("zformat") != None:
             zformat = self.axis_options["zformat"]
-            print(zformat)
-        # assert False
+        
         self.plot_imported_data(fig_options)
+
         if generate_plot:
             self.generate_figure(zformat)
+
+        if self.save_name is not None:
+            self.fig.save(self.save_location, self.save_name)
+
+        if self.show_fig:
+            self.fig.show()
 
     def plot_imported_data(self, opts):
         if opts is not None:
@@ -94,7 +100,6 @@ class MapPlotter:
         else:
             self.fig = figureGenerator()
             self.fig.init_figure()
-        plotted_legend = []
 
         self.fig.plot_map(
             xdata=self.xdata.data,
@@ -112,15 +117,3 @@ class MapPlotter:
         )
         self.fig.set_axis_ticklabels(**self.axis_options)
 
-        if self.save_name == None:
-            save_name = "Map {}".format(self.xdata_label)
-        else:
-            save_name = "Map {} - {} {} {}".format(
-                self.save_name, self.xdata_label, self.ydata_label, self.zdata_label
-            )
-        self.fig.save(self.save_location, save_name)
-        self.fig.show()
-
-
-class mapPlotter(MapPlotter):
-    _logger.warning("mapPlotter is deprecated, please use MapPlotter")
