@@ -369,7 +369,18 @@ class PsDataImport:
                             if len(_return_key) == 1:
                                 return_dir = idx[0]
                             else:
-                                return_dir = tuple(return_dir)
+                                if isinstance(return_dir, list):
+                                    return_dir = tuple(return_dir)
+                                elif isinstance(return_dir, str):
+                                    return_dir = None
+                                    # split_dir = return_dir.split("/")
+                                    # if len(split_dir) > 1:
+                                    #     return_dir = split_dir[-1]
+
+                                    # return_dir = None  # return_dir
+                            # print(return_dir)
+                            # print(return_dir)
+                            # assert False
                             data.set_label(_return_key)
 
                             if PsDataManager is not None:

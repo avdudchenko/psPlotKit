@@ -240,7 +240,8 @@ class PsDataManager(dict):
             _temp_der_list = list(__dir_key)
             _temp_der_list.append(__key)
             __data_dir = tuple(_temp_der_list)
-
+        elif __dir_key is None:
+            __data_dir = __key
         return __dir_key, __key, __data_dir
 
     def get_data(self, __dir_key, __key) -> None:
