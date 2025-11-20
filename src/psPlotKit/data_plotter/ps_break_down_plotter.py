@@ -9,7 +9,7 @@ from psPlotKit.util import logger
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
 
-_logger = logger.define_logger(__name__, "MapPlotter", level="INFO")
+_logger = logger.define_logger(__name__, "BreakDownPlotter", level="INFO")
 
 
 class BreakDownPlotter:
@@ -252,9 +252,19 @@ class BreakDownPlotter:
             self.axis_options["ylabel"] = self._get_axis_label(
                 self.ydata_label, self.yunit
             )  # all lines shold share units
+        
         self.plot_imported_data()
-        if generate_figure:
+
+        if generate_figure:  # TODO: other plotters call this generate_plot, should make this consistent
             self.generate_figure(loc=legend_loc, cols=legend_cols)
+
+        if self.save_name is not None:
+            self.fig.save(self.save_location, self.save_name)
+
+        if self.show_fig:
+            self.fig.show()
+        
+        self.fig.close()
 
     def plot_imported_data(self):
         if "fig_object" in self.fig_options:
@@ -285,19 +295,12 @@ class BreakDownPlotter:
             self.fig.plot_area(**line)
             old_data = line["ydata"]
 
-    def generate_figure(self, loc="upper left", cols=2):
+    def generate_figure(self, loc="upper left", cols=2): 
         if "ax_idx" in self.fig_options:
             self.axis_options["ax_idx"] = self.fig_options["ax_idx"]
         self.fig.set_axis(**self.axis_options)
         self.fig.add_legend(loc=loc, ncol=cols)
-        if self.save_name == None:
-            save_name = "{} vs {}".format(self.xdata_label, self.ydata_label)
-        else:
-            save_name = "{} - {} vs {}".format(
-                self.save_name, self.xdata_label, self.ydata_label
-            )
-        self.fig.save(self.save_location, save_name)
-        self.fig.show()
+
 
 
 class breakDownPlotter(BreakDownPlotter):
