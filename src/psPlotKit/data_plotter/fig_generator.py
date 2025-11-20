@@ -1787,6 +1787,9 @@ class FigureGenerator:
         # plt.open(self.fig)
         plt.show()
 
+    def close(self):
+        plt.close()
+
     def set_default_figure_settings(
         self, font_size=10, label_size=12, svg_font_setting="none"
     ):
