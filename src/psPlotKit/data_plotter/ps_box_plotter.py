@@ -8,10 +8,10 @@ __author__ = "Alexander V. Dudchenko (SLAC)"
 
 class boxPlotter:
     def __init__(
-        self, PsData, save_location="", save_folder=None, save_name=None, show_figs=True
+        self, PsData, save_location="", save_folder=None, save_name=None, show_fig=True
     ):
         self.save_location = create_save_location(save_location, save_folder)
-        self.show_figs = show_figs
+        self.show_fig = show_fig
         self.select_data_key_list = []
         self.PsData = PsData
         self.define_line_colors()
@@ -25,7 +25,7 @@ class boxPlotter:
         self.data_index_to_label = {}
 
     def _select_data(self, xkeys, ykeys):
-        print(ykeys)
+        # print(ykeys)
         self.PsData.select_data(xkeys, require_all_in_dir=False)
         self.PsData.select_data(ykeys, require_all_in_dir=False, add_to_existing=True)
 
@@ -65,7 +65,7 @@ class boxPlotter:
                 else:
                     idx = 0
                     self.line_indexes[auto_label] = {"idx": 0}
-                print(idx, label, auto_label)
+                # print(idx, label, auto_label)
             if isinstance(idx, int):
                 color = self.line_colors[idx]
             else:
@@ -104,7 +104,7 @@ class boxPlotter:
                 else:
                     skeys = [dkey]
 
-                print(key, dkey, data)
+                # print(key, dkey, data)
                 data_keys.append(tuple(skeys))
                 data_list.append(data)
         return data_keys, data_list
@@ -159,7 +159,7 @@ class boxPlotter:
             for skey in self._get_ydata(selected_keys, ykey):
                 for sk in skey:
                     if self._test_key_in_key(ykey, skey):
-                        print("sk", skey, sk, ykey)
+                        # print("sk", skey, sk, ykey)
                         _label = None
                         max_delta = None
                         for key in self.data_index_to_label:
@@ -185,7 +185,7 @@ class boxPlotter:
                                 _label = list(sk)[:]
                                 if isinstance(ydata, list) or isinstance(ydata, tuple):
                                     for yd in ydata:
-                                        print("t", _label, yd)
+                                        # print("t", _label, yd)
                                         if yd in _label:
                                             _label.remove(yd)
 
@@ -194,7 +194,7 @@ class boxPlotter:
                                         _label.remove(ydata)
                                 if len(_label) == 1:
                                     _label = _label[0]
-                                print(_label)
+                                # print(_label)
                                 if isinstance(_label, str) == False:
                                     _label = " ".join(map(str, _label))
                             else:
@@ -221,15 +221,15 @@ class boxPlotter:
                             min_delta, max_delta = np.interp(
                                 [-mx, mx], raw_ydata.data, raw_xdata.data
                             )
-                            print(
-                                "uniqual range",
-                                skey,
-                                min_range,
-                                max_range,
-                                "out",
-                                min_delta,
-                                max_delta,
-                            )
+                            # print(
+                            #     "uniqual range",
+                            #     skey,
+                            #     min_range,
+                            #     max_range,
+                            #     "out",
+                            #     min_delta,
+                            #     max_delta,
+                            # )
                         else:
                             min_delta, max_delta = np.min(min_range), np.max(max_range)
                         _order = np.argsort([min_delta, max_delta])
@@ -258,7 +258,7 @@ class boxPlotter:
                         if self.line_groups != {}:
 
                             for g_key in self.line_groups:
-                                print("g_key", skey, g_key, g_key in str(skey))
+                                # print("g_key", skey, g_key, g_key in str(skey))
                                 if g_key in str(skey):
                                     _label = tuple([g_key, _label])
                                     plot_label.replace(g_key, "")
@@ -278,8 +278,8 @@ class boxPlotter:
                         self.boxes[_label] = cur_box
                         box_index += 1
                         break
-        print("boxes", self.boxes)
-        print("box_groups", self.box_groups)
+        # print("boxes", self.boxes)
+        # print("box_groups", self.box_groups)
 
     def plot_tornado_plot(
         self, xdata, ydata, axis_options=None, generate_plot=True, fig_options=None
@@ -287,7 +287,7 @@ class boxPlotter:
         self._select_data(xdata, ydata)
         self.selected_data = self.PsData.get_selected_data()
         self.PsData.display()
-        print("sk", self.selected_data.keys())
+        # print("sk", self.selected_data.keys())
         self.generate_groups_lines = self._get_group_options(
             self.selected_data.keys(), xdata, ydata
         )
@@ -301,9 +301,19 @@ class boxPlotter:
             self.axis_options["xlabel"] = self._get_axis_label(
                 self.xdata_label, self.xunit
             )
+
         self.plot_imported_data(fig_options)
+
         if generate_plot:
             self.generate_figure()
+        
+        if self.save_name is not None:
+            self.fig.save(self.save_location, self.save_name)
+
+        if self.show_fig:
+            self.fig.show()
+        
+        self.fig.close()
 
     def plot_imported_data(self, opts):
         if opts is not None:
@@ -312,11 +322,11 @@ class boxPlotter:
         else:
             self.fig = figureGenerator()
             self.fig.init_figure()
-        plotted_legend = []
+        plotted_legend = []  # TODO: this is not used
 
         self.ylabels = []
         idx = len(self.boxes.keys()) - 1
-        print(self.boxes)
+        # print(self.boxes)
         for box_label, box in self.boxes.items():
             if box_label != self.ylabels:
                 self.ylabels.append(box_label)
@@ -327,13 +337,7 @@ class boxPlotter:
         self.axis_ticklabels["yticks"] = np.array(self.box_positions) - 0.5
 
     def generate_figure(self):
-        print(self.axis_options)
+        # print(self.axis_options)
         self.fig.set_axis(**self.axis_options)
         self.fig.set_axis_ticklabels(**self.axis_ticklabels)
         self.fig.add_legend()
-        if self.save_name == None:
-            save_name = "Tornado {}".format(self.xdata_label)
-        else:
-            save_name = "Tornado {} - {} vs {}".format(self.save_name, self.xdata_label)
-        self.fig.save(self.save_location, save_name)
-        self.fig.show()

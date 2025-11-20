@@ -170,10 +170,9 @@ class FigureGenerator:
     def get_color(self, ax, val_update=0):
         if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
             self.current_color_index[ax[0]][ax[1]] += val_update
-            # print(self.current_color_index)
             return int(self.current_color_index[ax[0]][ax[1]])
         else:
-            print(ax, self.current_color_index)
+            # print(ax, self.current_color_index)
             self.current_color_index[ax] += val_update
             return int(self.current_color_index[ax])
 
@@ -392,7 +391,7 @@ class FigureGenerator:
                 xdata = self.map_func_x(xdata)
                 ydata = self.map_func_y(ydata)
             except:
-                print("no map funcs, useing raw data")
+                print("no map funcs, using raw data")
         if marker_overlay is not None:
             self.get_axis(ax_idx).plot(
                 xdata,
@@ -408,7 +407,7 @@ class FigureGenerator:
                 markersize=markersize,
             )
             for i, k in enumerate(marker_ranges[1:]):
-                print("overlay", marker_overlay, k, marker_ranges[i])
+                # print("overlay", marker_overlay, k, marker_ranges[i])
                 plot_range = np.where(
                     (marker_overlay < k) & (marker_overlay >= marker_ranges[i])
                 )[0]
@@ -583,13 +582,12 @@ class FigureGenerator:
                         marker=marker,
                     )
         if log_data:
-            print(label, ylabel)
+            # print(label, ylabel)
             if save_label is None and label != "":
                 save_label = label
             elif save_label is None and ylabel != None:
                 save_label = ylabel
-            print(save_label, label, ylabel)
-            # assert False
+            # print(save_label, label, ylabel)
             self.plotted_data.update(
                 {
                     save_label: {
@@ -651,7 +649,7 @@ class FigureGenerator:
 
         if save_label is None:
             save_label = label
-        elif save_label is None and ylabel != None:
+        elif save_label is None and ylabel != None:  # TODO: Pylance says ylabel is not defined
             save_label = ylabel
         if log_data:
             self.plotted_data.update(
@@ -743,7 +741,7 @@ class FigureGenerator:
             self.get_color(ax_idx, 1)
         elif isinstance(color, int):
             color = self.colorMaps[self.colormaps][color]
-            print(color)
+            # print(color)
         dt = self.get_axis(ax_idx).boxplot(
             data,
             positions=[position],
@@ -773,7 +771,7 @@ class FigureGenerator:
     ):
         x = x.round(decimals=x_decimals)
         y = y.round(decimals=y_decimals)
-        print(x.shape)
+        # print(x.shape)
         if x_uniqu is None:
             x_uniqu = np.unique(x)
             y_uniqu = np.unique(y)
@@ -782,20 +780,20 @@ class FigureGenerator:
 
         xdata = []
         ydata = []
-        print(x_uniqu, y_uniqu)
+        # print(x_uniqu, y_uniqu)
         z = np.array(z)
-        print(z.ndim, y.ndim, x.ndim)
+        # print(z.ndim, y.ndim, x.ndim)
         if z.ndim == 1:
             for i, iz in enumerate(z):
-                print(x[i], y[i])
+                # print(x[i], y[i])
                 ix = np.where(abs(x[i] - np.array(x_uniqu)) < 1e-5)[0]
                 iy = np.where(abs(y[i] - np.array(y_uniqu)) < 1e-5)[0]
                 z_map[iy, ix] = iz
-                print(ix, iy, iz, x[i], y[i])
+                # print(ix, iy, iz, x[i], y[i])
         else:
             z_map = z
-        print(z_map)
-        print(x_uniqu, y_uniqu)
+        # print(z_map)
+        # print(x_uniqu, y_uniqu)
         return z_map, x_uniqu, y_uniqu
 
     def fix_nan_in_map(self, input_map):
@@ -873,8 +871,8 @@ class FigureGenerator:
         interp_map, uux, uuy = self.build_map_data(
             x=xy[:, 0], y=xy[:, 1], x_uniqu=ux, y_uniqu=uy, z=interp_points
         )
-        print(interp_map.shape)
-        print(interp_map)
+        # print(interp_map.shape)
+        # print(interp_map)
         return interp_map, uux, uuy
 
     def search_sequence_numpy(self, arr, seq):
@@ -917,7 +915,7 @@ class FigureGenerator:
         y = np.array(range(input_map.shape[0]))
 
         xx, yy = np.array(np.meshgrid(x, y))
-        print(xx, levels)
+        # print(xx, levels)
 
         return ax.contour(
             xx, yy, input_map, levels, colors=colors, norm=norm, zlevel=12
@@ -936,16 +934,15 @@ class FigureGenerator:
             loc_idxs = self.search_sequence_numpy(temp_map.flatten(), np.array([1, 2]))
             x_vals = xx.flatten()[loc_idxs]
             y_vals = yy.flatten()[loc_idxs]
-            print(x_vals, y_vals)
+            # print(x_vals, y_vals)
             if len(x_vals) > 2:
                 fit = np.polyfit(x_vals, y_vals, deg=2)
                 xinterp = np.linspace(min(x), max(x), 100)
                 yinterp = np.poly1d(fit)(xinterp)
                 ax.plot(xinterp, yinterp, color="black", lw=1)
-                print(self.search_sequence_numpy(temp_map.flatten(), np.array([1, 2])))
-                print(temp_map)
+                # print(self.search_sequence_numpy(temp_map.flatten(), np.array([1, 2])))
+                # print(temp_map)
             # print(pos_x_h)
-            # assas
 
     def plot_contourf(
         self,
@@ -981,7 +978,8 @@ class FigureGenerator:
         #     extend = "both"
         #     # cs.cmap.set_over(colors[0])
         #     # cs.cmap.set_over(colors[-1])
-        print("lvels", levels)
+
+        # print("lvels", levels)
         cs = ax.contourf(
             xx,
             yy,
@@ -1003,7 +1001,7 @@ class FigureGenerator:
         return cs
 
     def digitize_map(self, map_data, levels, colors):
-        print(levels)
+        # print(levels)
         for i, lu in enumerate(levels[1:]):
             lb, ub = levels[i], levels[i + 1]
             average_level = i  # levels[i] * 0.5 + levels[i + 1] * 0.5
@@ -1011,13 +1009,13 @@ class FigureGenerator:
             if len(map_data.shape) == 1:
                 idx = np.where((map_data < ub) & (map_data > lb))[0]
                 # print(idx)
-                print(ub, lb, average_level)
+                # print(ub, lb, average_level)
                 map_data[idx] = average_level
             else:
                 for m in map_data:
                     idx = np.where((m < ub) & (m > lb))[0]
                     # print(idx)
-                    print(ub, lb, average_level)
+                    # print(ub, lb, average_level)
                     m[idx] = average_level
         if colors is None:
             _colors = []
@@ -1027,7 +1025,7 @@ class FigureGenerator:
                         l / len(levels)
                     )
                 )
-            print(colors)
+            # print(colors)
         else:
             _colors = colors
             # for c in colors:
@@ -1036,12 +1034,12 @@ class FigureGenerator:
             #         _colors.append(tuple(int(c[i : i + 2], 16) for i in (0, 2, 4)))
             #     else:
             #         _colors.append(c)
-        print(_colors)
-        # assert False
+        # print(_colors)
+
         self.colorMaps["color_map"] = ListedColormap(_colors)  # len(levels))
         # print(self.colorMaps["color_map"])
-        # assert False
-        print(map_data)
+
+        # print(map_data)
         self.digitized = True
         return 0, i + 1
 
@@ -1160,7 +1158,7 @@ class FigureGenerator:
             # )
         # else:
         if plot_contour is not None:
-            print("plotting countou")
+            # print("plotting contour")
             self.contour_mode = True
             self.colorFig = self.plot_contourf(
                 self.get_axis(ax_idx),
@@ -1171,7 +1169,7 @@ class FigureGenerator:
                 extend_colors=extend_colors,
                 norm=norm,
             )
-            print(norm)
+            # print(norm)
             self.plot_contour(
                 self.get_axis(ax_idx), map_data, plot_contour, "black", norm=norm
             )
@@ -1205,7 +1203,7 @@ class FigureGenerator:
         if text and map_data.size < 200:
             for r, row in enumerate(map_data):
                 for c, value in enumerate(row):
-                    print(abs(value), ((vmax - vmin) / 2 + vmin))
+                    # print(abs(value), ((vmax - vmin) / 2 + vmin))
                     if value < ((vmax - vmin) / 2 + vmin):
                         text_color = "white"
                     else:
@@ -1240,10 +1238,10 @@ class FigureGenerator:
 
     def gen_map_function(self, axisdata, scale="linear"):
         indexes = np.array(range(len(axisdata)))
-        print(axisdata, indexes, scale)
+        # print(axisdata, indexes, scale)
         # print("axis data", axisdata, indexes, scale)
         if scale == "interp":
-            print(axisdata[axisdata == axisdata], indexes[axisdata == axisdata])
+            # print(axisdata[axisdata == axisdata], indexes[axisdata == axisdata])
             return scipy.interpolate.interp1d(
                 axisdata[axisdata == axisdata],
                 indexes[axisdata == axisdata],
@@ -1323,8 +1321,7 @@ class FigureGenerator:
                 #     np.min(self.plotted_data["datax"]),
                 #     np.max(self.plotted_data["datax"]),
                 # )
-                # assert False
-                print("xticklabels", xticklabels)
+                # print("xticklabels", xticklabels)
                 self.map_func_x = self.gen_map_function(
                     self.plotted_data["datax"], xscale
                 )
@@ -1336,13 +1333,13 @@ class FigureGenerator:
                     offset_y = 0.5
 
                 ticks = self.map_func_x(xticklabels)
-                print(xticklabels, ticks)
-                print(offset_x, ticks[-1], ticks[-1] + offset_y)
+                # print(xticklabels, ticks)
+                # print(offset_x, ticks[-1], ticks[-1] + offset_y)
                 self.get_axis(ax_idx).set_xlim(offset_x, ticks[-1] + offset_y)
                 # offset = 0.5 / self.map_x_width  # / 2
                 # print(offset)
                 # print(xticklabels)
-                print("xticks", ticks)
+                # print("xticks", ticks)
                 self.get_axis(ax_idx).set_xticks(ticks)
                 if xscale == "log":
                     minor_ticks = self.gen_minor_ticks(xticklabels)
@@ -1398,7 +1395,7 @@ class FigureGenerator:
                 # print(self.plotted_data["datay"])
 
                 # ticks = self.map_func_y(yticklabels)
-                print("tiks", ticks)
+                # print("tiks", ticks)
                 self.get_axis(ax_idx).set_yticks(ticks)
                 if yscale == "log":
                     minor_ticks = self.gen_minor_ticks(yticklabels)
@@ -1504,7 +1501,7 @@ class FigureGenerator:
         yaxiscolor="black",
         **kwargs,
     ):
-        print("got xticks", xticks)
+        # print("got xticks", xticks)
         if xlims is not None:
             self.get_axis(ax_idx).set_xlim(xlims[0], xlims[1])
             if xticks is None:
@@ -1516,7 +1513,7 @@ class FigureGenerator:
 
         if xticks is not None:
             self.get_axis(ax_idx).set_xticks(np.array(xticks))
-            print("set xticks lims", xticks)
+            # print("set xticks lims", xticks)
             if xlims is None:
                 self.get_axis(ax_idx).set_xlim(xticks[0], xticks[-1])
         if ylims is not None:
@@ -1539,7 +1536,7 @@ class FigureGenerator:
                 yticks = np.linspace(ylims[0], ylims[1], default_yticks)
                 self.get_axis(ax_idx).set_yticks(yticks)
                 self.get_axis(ax_idx).set_ylim(yticks[0], yticks[-1])
-                print("set y lims", yticks)
+                # print("set y lims", yticks)
             except:
                 print("failed to auto gen yticks")
         if xticks is None and xlims is None:
@@ -1707,7 +1704,7 @@ class FigureGenerator:
         # if self.idx_totals[0] == 1 and self.idx_totals[1] == 1:
         #     return self.ax[idx]
         if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
-            print(self, self.ax, idx)
+            # print(self, self.ax, idx)
             return self.ax[idx[0], idx[1]]
         else:
             return self.ax[idx]
@@ -1746,10 +1743,10 @@ class FigureGenerator:
 
     def onclick(self, event):
         ix, iy = event.xdata, event.ydata
-        print(dir(event))
-        print(event.inaxes)
-        print(event.canvas)
-        print("x = %d, y = %d" % (ix, iy))
+        # print(dir(event))
+        # print(event.inaxes)
+        # print(event.canvas)
+        # print("x = %d, y = %d" % (ix, iy))
 
         coords = [ix, iy]
         self.click_positions["x"].append(event.xdata)
@@ -1789,6 +1786,9 @@ class FigureGenerator:
     def show(self):
         # plt.open(self.fig)
         plt.show()
+
+    def close(self):
+        plt.close()
 
     def set_default_figure_settings(
         self, font_size=10, label_size=12, svg_font_setting="none"
