@@ -322,35 +322,6 @@ class FigureGenerator:
         if save_label is None:
             save_label = label
 
-    def plot_arrow(
-        self,
-        x,
-        y,
-        dx,
-        dy,
-        ax_idx=0,
-        color=None,
-        head_starts_at_zero=False,
-        lw=1,
-        hw=20,
-        hl=15,
-    ):
-        if color is None:
-            color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
-            self.get_color(ax_idx, 1)
-        self.get_axis(ax_idx).arrow(
-            x,
-            y,
-            dx,
-            dy,
-            width=lw,
-            length_includes_head=True,
-            head_width=hw,
-            head_length=hl,
-            color=color,
-            head_starts_at_zero=head_starts_at_zero,
-        )
-
     def plot_line(
         self,
         xdata=None,
@@ -649,7 +620,9 @@ class FigureGenerator:
 
         if save_label is None:
             save_label = label
-        elif save_label is None and ylabel != None:  # TODO: Pylance says ylabel is not defined
+        elif (
+            save_label is None and ylabel != None
+        ):  # TODO: Pylance says ylabel is not defined
             save_label = ylabel
         if log_data:
             self.plotted_data.update(
@@ -709,16 +682,6 @@ class FigureGenerator:
                 color=color,
                 label=label,
             )
-        # bins = np.linspace(min(data), max(data), num_bins)
-        # counts, binedges = np.histogram(data, bins=bins)
-        # cdf = np.cumsum(counts)
-        # if color  is None:
-        #     color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
-        #     self.get_color(ax_idx, 1)
-        # cdf = [0] + list(cdf)
-        # self.get_axis(ax_idx).plot(
-        #     binedges, cdf / cdf[-1], color=color, label=label, ls=ls, lw=lw
-        # )
 
     def plot_box(
         self,
@@ -755,9 +718,9 @@ class FigureGenerator:
         )
         if label is not None:
             self.plot_bar([0], [0], color=color, hatch=hatch, label=label)
-        percentiles = np.percentile(data, [whiskers[0], 25, 50, 75, whiskers[1]])
+        self.percentiles = np.percentile(data, [whiskers[0], 25, 50, 75, whiskers[1]])
         if save_label is not None:
-            self.plotted_data.update({save_label: {"box_data": percentiles}})
+            self.plotted_data.update({save_label: {"box_data": self.percentiles}})
 
     def build_map_data(
         self,
@@ -1064,15 +1027,6 @@ class FigureGenerator:
         zscale="norm",
         fix_nans=False,
         label="map",
-        plot_contour_lines=None,
-        contour_line_colors="black",
-        plot_contour=None,
-        contour_colors=None,
-        overlay_levels=None,
-        upscale=None,
-        extend=None,
-        extend_colors=None,
-        digitize=False,
         digitize_levels=None,
         digitize_colors=None,
         unique_x_decimals=5,
@@ -1101,34 +1055,9 @@ class FigureGenerator:
                 overlay_map = zoverlay
             if fix_nans:
                 map_data = self.fix_nan_in_map(map_data)
-
-            # print("build map",     map)
         else:
             map_data = np.array(zdata)
             datax, datay = xdata, ydata
-            overlay_map = zoverlay
-        if upscale is not None:
-            datax_o, datay_o = copy.deepcopy(datax), copy.deepcopy(datay)
-            map_data, datax, datay = self.upscale_map(
-                map_data,
-                upscale=upscale,
-                x=datax,
-                y=datay,
-                upscale_x_range=None,
-                upscale_y_range=None,
-            )
-            # if overlay_map is not None:
-            #     # print("overlay_map", overlay_map)
-            #     overlay_map, _, _ = self.upscale_map(
-            #         overlay_map,
-            #         upscale=upscale,
-            #         x=datax_o,
-            #         y=datay_o,
-            #         upscale_x_range=None,
-            #         upscale_y_range=None,
-            #     )
-            #     print("overlay_map", overlay_map)
-        # print("mao shape", map.shape)
         self.map_x_width = map_data.shape[1]
         self.map_y_width = map_data.shape[0]
         if datax is None:
@@ -1138,10 +1067,6 @@ class FigureGenerator:
         if vmin is None and vmax is None:
             vmin = np.nanmin(map_data)
             vmax = np.nanmax(map_data)
-        # if fix_nans:
-        #     map = self.fix_nan_in_map(xdata, ydata, zdata,)
-        # if fix_nans:
-        #     map = self.fix_nan_in_map(np.unique(xdata), np.unique(ydata), map)
         if digitize_levels is not None:
             vmin, vmax = self.digitize_map(map_data, digitize_levels, digitize_colors)
 
@@ -1149,57 +1074,19 @@ class FigureGenerator:
             norm = LogNorm(vmin=vmin, vmax=vmax)
         else:
             norm = None
-            # self.colorFig = self.get_axis(ax_idx).imshow(
-            #     map_data,
-            #     cmap=self.colorMaps["color_map"],
-            #     aspect=aspect,
-            #     norm=norm,
-            #     origin="upper",
-            # )
-        # else:
-        if plot_contour is not None:
-            # print("plotting contour")
-            self.contour_mode = True
-            self.colorFig = self.plot_contourf(
-                self.get_axis(ax_idx),
-                map_data,
-                plot_contour,
-                contour_colors,
-                extend=extend,
-                extend_colors=extend_colors,
-                norm=norm,
-            )
-            # print(norm)
-            self.plot_contour(
-                self.get_axis(ax_idx), map_data, plot_contour, "black", norm=norm
-            )
-        else:
-            if norm != None:
-                vmin = None
-                vmax = None
-            self.colorFig = self.get_axis(ax_idx).imshow(
-                map_data,
-                vmin=vmin,
-                vmax=vmax,
-                cmap=self.colorMaps["color_map"],
-                aspect=aspect,
-                origin="upper",
-                norm=norm,
-            )
-        if plot_contour_lines is not None:
-            self.plot_contour(
-                self.get_axis(ax_idx), map_data, plot_contour_lines, contour_line_colors
-            )
-        if overlay_map is not None:
-            self.plot_linear_contours(
-                self.get_axis(ax_idx),
-                overlay_map,
-                datax,
-                datay,
-                overlay_levels,
-                upscale,
-            )
-            # self.plot_contour(self.get_axis(ax_idx), overlay_map, overlay_levels, "black")
+
+        if norm != None:
+            vmin = None
+            vmax = None
+        self.colorFig = self.get_axis(ax_idx).imshow(
+            map_data,
+            vmin=vmin,
+            vmax=vmax,
+            cmap=self.colorMaps["color_map"],
+            aspect=aspect,
+            origin="upper",
+            norm=norm,
+        )
         if text and map_data.size < 200:
             for r, row in enumerate(map_data):
                 for c, value in enumerate(row):
@@ -1650,8 +1537,6 @@ class FigureGenerator:
     def add_colorbar(
         self, zlabel, zticks=None, zformat=1, zlabelpad=17, cbar=None, **kwargs
     ):
-        # if ticks is None:
-        #     ticks = np.linspace(zlims[0], zlims[1], 5)
         if cbar == None:
             cfig = self.colorFig
         else:
@@ -1700,34 +1585,11 @@ class FigureGenerator:
         )
 
     def get_axis(self, idx):
-        # print(self.ax)
-        # if self.idx_totals[0] == 1 and self.idx_totals[1] == 1:
-        #     return self.ax[idx]
         if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
             # print(self, self.ax, idx)
             return self.ax[idx[0], idx[1]]
         else:
             return self.ax[idx]
-
-    def remove_sub_fig_space(self):
-        if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
-            # i#f self.sharex:
-            for i in range(self.idx_totals[0] - 1):
-                for j in range(self.idx_totals[1]):
-                    self.remove_ticks(ax_idx=(i, j), x_axis=True)
-            # if self.sharey:
-            for i in range(self.idx_totals[1]):
-                for j in range(1, self.idx_totals[1]):
-                    self.remove_ticks(ax_idx=(i, j), y_axis=True)
-
-        else:
-            # if self.sharex:
-            for i in range(self.idx_totals[0] - 1):
-                self.remove_ticks(ax_idx=i, x_axis=True)
-            # if self.sharey:
-            for i in range(1, self.idx_totals[1]):
-                self.remove_ticks(ax_idx=i, y_axis=True)
-        self.fig.subplots_adjust(wspace=0, hspace=0)
 
     def remove_ticks(self, ax_idx=0, y_axis=None, x_axis=None):
         if y_axis is True:
@@ -1741,29 +1603,6 @@ class FigureGenerator:
         else:
             return str(round(value, decimals))
 
-    def onclick(self, event):
-        ix, iy = event.xdata, event.ydata
-        # print(dir(event))
-        # print(event.inaxes)
-        # print(event.canvas)
-        # print("x = %d, y = %d" % (ix, iy))
-
-        coords = [ix, iy]
-        self.click_positions["x"].append(event.xdata)
-        self.click_positions["y"].append(event.ydata)
-        self.click_positions["axis"].append(str(event.inaxes))
-        self.click_positions["c_num"].append(self.click_number)
-        self.click_number += 1
-        event.inaxes.scatter(
-            [event.xdata], [event.ydata], c=None, facecolors=None, edgecolors="red"
-        )
-        self.fig.canvas.draw()
-
-    def add_mouse_click_logging(self):
-        self.click_positions = {"x": [], "y": [], "axis": [], "c_num": []}
-        self.click_number = 0
-        self.fig.canvas.mpl_connect("button_press_event", self.onclick)
-
     def format_ticks(self, ticks, decimals):
         return [self.format_value(tick, decimals) for tick in ticks]
 
@@ -1771,7 +1610,9 @@ class FigureGenerator:
         self.fig.savefig(name + ".jpg", dpi=300, bbox_inches="tight", pad_inches=0.1)
         self.fig.savefig(name + ".svg", dpi=300, bbox_inches="tight", pad_inches=0.1)
 
-    def save(self, save_location=None, file_name=None, figure_description=None):
+    def save(
+        self, save_location=None, file_name=None, figure_description=None, data=None
+    ):
         if save_location is not None:
             self.save_location = save_location
         if file_name is not None:
@@ -1779,12 +1620,14 @@ class FigureGenerator:
         if figure_description is not None:
             self.figure_description = None
         self.save_fig(self.save_location + "\\" + self.file_name)
-        self.export_data_to_csv(
-            self.save_location + "\\" + self.file_name, self.figure_description
-        )
+        if data is None:
+            self.export_data_to_csv(
+                self.save_location + "\\" + self.file_name, self.figure_description
+            )
+        else:
+            self.save_csv(self.save_location + "\\" + self.file_name, data)
 
     def show(self):
-        # plt.open(self.fig)
         plt.show()
 
     def close(self):
@@ -1831,6 +1674,7 @@ class FigureGenerator:
         return string
 
     def export_data_to_csv(self, file_name="none", figure_description=None):
+
         data = []
         if figure_description is not None:
             data.append([figure_description])
@@ -1881,21 +1725,22 @@ class FigureGenerator:
                         lb = ""
                     data.append([k] + list(self.plotted_data["dataz"][ik]))
         elif self.box_mode:
-            # print("box_mode", self.plotted_data)
-            # data.append(["key", "low_val", "high_val"])
-            header_added = False
-            for key, item in self.plotted_data.items():
-                # print(item)
-                if isinstance(item, dict):
-                    if item["box_data"][0] != None:
-                        if len(item["box_data"]) == 2 and header_added == False:
-                            data.append(["key", "low_val", "high_val"])
-                            header_added = True
-                        elif header_added == False:
-                            data.append(["key", "LW", "25", "50", "75", "HW"])
-                            header_added = True
-                        data.append([key] + list(item["box_data"]))
-            # print(data)
+            pass
+            # # print("box_mode", self.plotted_data)
+            # # data.append(["key", "low_val", "high_val"])
+            # header_added = False
+            # for key, item in self.plotted_data.items():
+            #     # print(item)
+            #     if isinstance(item, dict):
+            #         if item["box_data"][0] != None:
+            #             if len(item["box_data"]) == 2 and header_added == False:
+            #                 data.append(["key", "low_val", "high_val"])
+            #                 header_added = True
+            #             elif header_added == False:
+            #                 data.append(["key", "LW", "25", "50", "75", "HW"])
+            #                 header_added = True
+            #             data.append([key] + list(item["box_data"]))
+            # # print(data)
 
         else:
             if "xlabel" in self.plotted_data:
@@ -1959,6 +1804,11 @@ class FigureGenerator:
                             row.append("")
                 data.append(row)
         # print(self.plotted_data)
+
+        save_name = file_name + ".csv"
+        self.save_csv(save_name, data)
+
+    def save_csv(self, file_name, data):
         save_name = file_name + ".csv"
         with open(save_name, "w", newline="") as csvfile:
             spamwriter = csv.writer(csvfile, delimiter=",")
