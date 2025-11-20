@@ -92,6 +92,8 @@ class MapPlotter:
 
         if self.show_fig:
             self.fig.show()
+        
+        self.fig.close()
 
     def plot_imported_data(self, opts):
         if opts is not None:
