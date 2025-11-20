@@ -649,7 +649,7 @@ class FigureGenerator:
 
         if save_label is None:
             save_label = label
-        elif save_label is None and ylabel != None:
+        elif save_label is None and ylabel != None:  # TODO: Pylance says ylabel is not defined
             save_label = ylabel
         if log_data:
             self.plotted_data.update(
