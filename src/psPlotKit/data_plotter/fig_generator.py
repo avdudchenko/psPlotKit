@@ -982,10 +982,10 @@ class FigureGenerator:
                     m[idx] = average_level
         if colors is None:
             _colors = []
-            for l, _ in enumerate(levels):
+            for l, _ in enumerate(levels[1:]):
                 _colors.append(
                     matplotlib.colormaps.get_cmap(self.colorMaps["color_map"])(
-                        l / len(levels)
+                        l / (len(levels) - 1)
                     )
                 )
             # print(colors)
@@ -997,7 +997,7 @@ class FigureGenerator:
             #         _colors.append(tuple(int(c[i : i + 2], 16) for i in (0, 2, 4)))
             #     else:
             #         _colors.append(c)
-        # print(_colors)
+        print(_colors)
 
         self.colorMaps["color_map"] = ListedColormap(_colors)  # len(levels))
         # print(self.colorMaps["color_map"])

@@ -252,6 +252,7 @@ class PsDataImport:
         selected_directories = []
         if directory_keys is None:
             _logger.info("Searching in all directories")
+
             return self.directories
         else:
             for d in self.directories:
@@ -259,6 +260,7 @@ class PsDataImport:
                     selected_directories.append(d)
                     _logger.info("User selected {}".format(d))
             _logger.debug("get_selected_directories took: {}".format(time.time() - t))
+
             return selected_directories
 
     def test_if_in_directory(self, directory, directory_keys):
@@ -322,9 +324,16 @@ class PsDataImport:
         if PsDataManager is None:
             data_dict = {}
         selected_directories = self.get_selected_directories(directories)
+        _logger.info("got selected directories {} seconds!".format(time.time() - ts))
+        _logger.info(
+            "Searing for {} keys: {}. unique keys".format(
+                len(data_key_list), len(self.unique_data_keys)
+            )
+        )
         for directory in selected_directories:
             unique_labels = self.file_index[directory]["unique_directory"]
             for dkl in data_key_list:
+                tsk = time.time()
                 if isinstance(dkl, dict):
                     key = dkl["filekey"]
                     return_key = dkl["return_key"]
@@ -387,6 +396,7 @@ class PsDataImport:
                                 PsDataManager.add_data(return_dir, _return_key, data)
                             else:
                                 data_dict[return_dir, _return_key] = data
+
         _logger.info("Done importing data in {} seconds!".format(time.time() - ts))
         if PsDataManager is not None:
             return PsDataManager

@@ -75,13 +75,13 @@ class PsDataManager(dict):
                 exact_keys: (optional) - if exact keys should be imported
                 match_accuracy: (optional) - how accurately the keys need to match if exact_keys == False
         """
-        if self.registered_key_list is None:
-            self.registered_key_list = data_key_list
-        elif data_key_list is not None:
-            self.registered_key_list = self.registered_key_list + data_key_list
+        if data_key_list is None:
+            data_key_list = self.registered_key_list
+        elif data_key_list is not None and self.registered_key_list is not None:
+            data_key_list = self.registered_key_list + data_key_list
         for instance in self.PsDataImportInstances:
             instance.get_data(
-                data_key_list=self.registered_key_list,
+                data_key_list=data_key_list,
                 directories=directories,
                 num_keys=num_keys,
                 exact_keys=exact_keys,
@@ -271,11 +271,12 @@ class PsDataManager(dict):
         require_all_in_dir=True,
         exact_keys=True,
         add_to_existing=False,
+        return_all_if_non_found=False,
     ):
         if isinstance(selected_keys, str):
             selected_keys = [selected_keys]
         selected_dir_keys = self.select_dir_keys(
-            selected_keys, require_all_in_dir, exact_keys
+            selected_keys, require_all_in_dir, exact_keys, return_all_if_non_found
         )
         if add_to_existing:
             self.selected_directories = self.selected_directories + selected_dir_keys
@@ -293,7 +294,9 @@ class PsDataManager(dict):
             PsData.add_data(self[dir_key].__dir_key, self[dir_key].__key, self[dir_key])
         return PsData
 
-    def select_dir_keys(self, selected_keys, require_all_in_dir, exact) -> None:
+    def select_dir_keys(
+        self, selected_keys, require_all_in_dir, exact, return_all_if_non_found=True
+    ) -> None:
         """find if provided keys are dir key, and return
         selected dir keys, otherwise return all"""
         dir_keys = []
@@ -323,7 +326,7 @@ class PsDataManager(dict):
                 dir_keys.append(dkey)
             elif require_all_in_dir == False and num_keys_found > 0:
                 dir_keys.append(dkey)
-        if len(dir_keys) == 0:
+        if len(dir_keys) == 0 and return_all_if_non_found:
             dir_keys = current_keys[:]
         return dir_keys
 
