@@ -260,14 +260,6 @@ class BreakDownPlotter:
         ):  # TODO: other plotters call this generate_plot, should make this consistent
             self.generate_figure(loc=legend_loc, cols=legend_cols)
 
-        if self.save_name is not None:
-            self.fig.save(self.save_location, self.save_name)
-
-        if self.show_fig:
-            self.fig.show()
-
-        self.fig.close()
-
     def plot_imported_data(self):
         if "fig_object" in self.fig_options:
             self.fig = self.fig_options.get("fig_object")
@@ -302,6 +294,14 @@ class BreakDownPlotter:
             self.axis_options["ax_idx"] = self.fig_options["ax_idx"]
         self.fig.set_axis(**self.axis_options)
         self.fig.add_legend(loc=loc, ncol=cols)
+
+        if self.save_name is not None:
+            self.fig.save(self.save_location, self.save_name)
+
+        if self.show_fig:
+            self.fig.show()
+
+        self.fig.close()
 
 
 class breakDownPlotter(BreakDownPlotter):
