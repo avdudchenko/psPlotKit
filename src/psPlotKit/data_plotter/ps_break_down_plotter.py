@@ -19,11 +19,11 @@ class BreakDownPlotter:
         save_location=None,
         save_folder=None,
         save_name=None,
-        show_figs=True,
+        show_fig=True,
     ):
 
         self.save_location = create_save_location(save_location, save_folder)
-        self.show_figs = show_figs
+        self.show_fig = show_fig
         self.select_data_key_list = []
         self.PsData = PsData
         self.define_plot_styles()
@@ -252,10 +252,12 @@ class BreakDownPlotter:
             self.axis_options["ylabel"] = self._get_axis_label(
                 self.ydata_label, self.yunit
             )  # all lines shold share units
-        
+
         self.plot_imported_data()
 
-        if generate_figure:  # TODO: other plotters call this generate_plot, should make this consistent
+        if (
+            generate_figure
+        ):  # TODO: other plotters call this generate_plot, should make this consistent
             self.generate_figure(loc=legend_loc, cols=legend_cols)
 
         if self.save_name is not None:
@@ -263,7 +265,7 @@ class BreakDownPlotter:
 
         if self.show_fig:
             self.fig.show()
-        
+
         self.fig.close()
 
     def plot_imported_data(self):
@@ -295,12 +297,11 @@ class BreakDownPlotter:
             self.fig.plot_area(**line)
             old_data = line["ydata"]
 
-    def generate_figure(self, loc="upper left", cols=2): 
+    def generate_figure(self, loc="upper left", cols=2):
         if "ax_idx" in self.fig_options:
             self.axis_options["ax_idx"] = self.fig_options["ax_idx"]
         self.fig.set_axis(**self.axis_options)
         self.fig.add_legend(loc=loc, ncol=cols)
-
 
 
 class breakDownPlotter(BreakDownPlotter):
