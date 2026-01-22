@@ -85,9 +85,6 @@ class PsCosting:
         self.PsDataManager = PsDataManager
         self.PsDataManager.load_data(self.costing_block_keys, exact_keys=True)
         self.unique_directory_keys = self.PsDataManager.directory_keys
-        # print(self.unique_directory_keys)
-        # for key in self.PsDataManager.keys():
-        #     print(key)
         self.calculate_costs()
 
     def normalize_cost(self, cost):
@@ -320,7 +317,9 @@ class PsCosting:
                     > 0.01
                 )
                 if error:
-                    _logger.warning("Manually calculated LCOW differs from h5 LCOW!")
+                    _logger.warning(
+                        f"Manually calculated LCOW differs from h5 LCOW for {udir}!"
+                    )
                     _logger.warning(
                         "h5file LCOW is {}".format(self.global_costs["LCOW"])
                     )
@@ -333,6 +332,8 @@ class PsCosting:
                             self.fixed_operating_cost_ref
                         )
                     )
+                else:
+                    _logger.info(f"Manually calculated LCOW matches h5 LCOW for {udir}")
 
     def get_global_cost(self, udir):
         udir = self.PsDataManager._dir_to_tuple(udir)
@@ -352,8 +353,12 @@ class PsCosting:
                 if f"{block}.{test_key}" == f"{sub_key}.{d_split[i+1]}":
                     # print(block, sub_key, d_key, test_key)
                     return True
-                else:
-                    print(f"{block}.{test_key}", f"{sub_key}.{d_split[i+1]}")
+                # else:
+                #     print(
+                #         " Did not find block ",
+                #         f"{block}.{test_key}",
+                #         f"{sub_key}.{d_split[i+1]}",
+                #     )
         return False
 
     def get_device_cost(self, device_keys, udir, cost_type, block_name=None):
@@ -380,48 +385,55 @@ class PsCosting:
                             get_data = False
 
                         if get_data:
-                            # print(block_name,fs_device, d_key)
                             try:
                                 sdata = self.PsDataManager.get_data(udir, d_key)
-                                if "USD" not in sdata.sunits:
-                                    data = sdata.udata.rescale(qs.W)
-                                    data = data * qs.year
-                                    data = data.rescale(qs.kWh)
-                                    data = data * self.global_costs["electricity_cost"]
-                                    data = (
-                                        data.rescale(self.USD)
-                                        / qs.year
-                                        # * self.global_costs["utilization_factor"]
-                                    )
-                                    # print(data)
-                                elif "USD/year" in sdata.sunits and cost_type == "OPEX":
-                                    data = (
-                                        sdata.udata
-                                        # * self.global_costs["utilization_factor"]
-                                    )
-                                else:
-                                    data = sdata.udata
-                                if cost_type == "OPEX":
-                                    # make sure current d_key is not a fixed_opertaing_cost
-                                    fixed_check = all(
-                                        [
-                                            key_option in d_key
-                                            for key_option in self.fixed_operating_cost_ref
-                                        ]
-                                    )
-                                    if fixed_check == False:
-                                        # print(d_key)
+                                if sdata.sunits != "dimensionless":
+                                    if "USD" not in sdata.sunits:
+                                        data = sdata.udata.rescale(qs.W)
+                                        data = data * qs.year
+                                        data = data.rescale(qs.kWh)
                                         data = (
-                                            data
-                                            * self.global_costs["utilization_factor"]
+                                            data * self.global_costs["electricity_cost"]
                                         )
-                                # else:
-                                #     print(d_key, data)
-                                # print(data)
-                                if data_sum is None:
-                                    data_sum = data
-                                else:
-                                    data_sum = data_sum + data
+                                        data = (
+                                            data.rescale(self.USD)
+                                            / qs.year
+                                            # * self.global_costs["utilization_factor"]
+                                        )
+                                        # print(data)
+                                    elif (
+                                        "USD/year" in sdata.sunits
+                                        and cost_type == "OPEX"
+                                    ):
+                                        data = (
+                                            sdata.udata
+                                            # * self.global_costs["utilization_factor"]
+                                        )
+                                    else:
+                                        data = sdata.udata
+                                    if cost_type == "OPEX":
+                                        # make sure current d_key is not a fixed_opertaing_cost
+                                        fixed_check = all(
+                                            [
+                                                key_option in d_key
+                                                for key_option in self.fixed_operating_cost_ref
+                                            ]
+                                        )
+                                        if fixed_check == False:
+                                            # print(d_key)
+                                            data = (
+                                                data
+                                                * self.global_costs[
+                                                    "utilization_factor"
+                                                ]
+                                            )
+                                    # else:
+                                    #     print(d_key, data)
+                                    # print(data)
+                                    if data_sum is None:
+                                        data_sum = data
+                                    else:
+                                        data_sum = data_sum + data
                             except KeyError:
                                 pass
 

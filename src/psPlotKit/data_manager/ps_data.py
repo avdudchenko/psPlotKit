@@ -161,8 +161,8 @@ class PsData:
         if self.data_is_numbers:
             self.data = self.data * manual_conversion
         qsunits = self._get_qs_unit()
-        self.udata = qs.Quantity(self.data[:], qsunits)
-        self.uraw_data = qs.Quantity(self.raw_data[:], qsunits)
+        self.udata = qs.Quantity(self.data.copy(), qsunits)
+        self.uraw_data = qs.Quantity(self.raw_data.copy(), qsunits)
         self.data = self.udata.magnitude
         self.set_label()
 
@@ -187,8 +187,6 @@ class PsData:
     def _get_qs_unit(self):
         if self.sunits not in self.custom_units:
             try:
-                # print(self.sunits)
-                unit = qs.Quantity(1, self.sunits)
                 qsunits = self.sunits
             except LookupError:
                 # _logger.info("created custom unit {}".format(self.sunits))
