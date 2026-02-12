@@ -306,13 +306,13 @@ class boxPlotter:
 
         if generate_plot:
             self.generate_figure()
-        
+
         if self.save_name is not None:
             self.fig.save(self.save_location, self.save_name)
 
         if self.show_fig:
             self.fig.show()
-        
+
         self.fig.close()
 
     def plot_imported_data(self, opts):

@@ -236,16 +236,11 @@ class PsDataManager(dict):
 
     def _process_dir_data_keys(self, __dir_key, __key):
 
-        # def _process_key(dkey):
-        #     if isinstance(dkey, str):
-        #         dkey = list([dkey])
-        #     return list(dkey)
         if isinstance(__key, list):
             if len(__key) == 1:
                 __key = __key[0]
             else:
                 __key = tuple(__key)
-        # print(__dir_key)
         if isinstance(__dir_key, list):
             _temp_der_list = []
             if len(__dir_key) == 1:

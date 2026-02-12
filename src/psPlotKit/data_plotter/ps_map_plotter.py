@@ -81,7 +81,7 @@ class MapPlotter:
 
         if self.axis_options.get("zformat") != None:
             zformat = self.axis_options["zformat"]
-        
+
         self.plot_imported_data(fig_options)
 
         if generate_plot:
@@ -92,7 +92,7 @@ class MapPlotter:
 
         if self.show_fig:
             self.fig.show()
-        
+
         self.fig.close()
 
     def plot_imported_data(self, opts):
@@ -118,4 +118,3 @@ class MapPlotter:
             self.axis_options["zlabel"], zticks=self.zlevels, zformat=zformat
         )
         self.fig.set_axis_ticklabels(**self.axis_options)
-
