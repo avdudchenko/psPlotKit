@@ -243,7 +243,7 @@ class TestEndToEnd:
         """Register a mix of real and fake keys, load, then verify only
         the fake one is reported missing."""
         data_manager.register_data_key("LCOW", "LCOW")
-        data_manager.register_data_key("fs.costing.reDer_osmosis", "Bogus")
+        data_manager.register_data_key("fs.costing.reDer_osmosis.membrane_cost", "Bogus")
         data_manager.load_data()
 
         assert data_manager._registered_key_import_status["LCOW"]["imported"] is True
