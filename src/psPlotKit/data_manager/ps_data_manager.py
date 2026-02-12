@@ -7,6 +7,7 @@ from psPlotKit.data_manager.ps_costing_tool import PsCosting
 import copy
 import yaml
 import warnings
+import difflib
 
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
@@ -27,6 +28,7 @@ class PsDataManager(dict):
         self.reduced_data_idx = "reduction_idxs"
         self.mask_data = True
         self.global_reduction_directory = None
+        self._registered_key_import_status = {}
         if data_files is not None:
 
             self.PsDataImportInstances = []
@@ -127,6 +129,10 @@ class PsDataManager(dict):
                 "conversion_factor only works when assign_units is specified"
             )
         self.registered_key_list.append(key_dict)
+        self._registered_key_import_status[return_key] = {
+            "file_key": file_key,
+            "imported": False,
+        }
 
     def display(self):
         """func to show file data content in a clean manner"""
@@ -200,7 +206,21 @@ class PsDataManager(dict):
             raise TypeError("Expected PsData instance")
         __value.__key = __key
         __value.__dir_key = __dir_key
+        self._mark_key_imported(__key)
         return super().__setitem__(__data_dir, __value)
+
+    def _mark_key_imported(self, __key):
+        """Check if any string values in __key match a registered return key
+        and mark it as imported."""
+        if isinstance(__key, str):
+            key_strings = [__key]
+        elif isinstance(__key, (tuple, list)):
+            key_strings = [k for k in __key if isinstance(k, str)]
+        else:
+            return
+        for ks in key_strings:
+            if ks in self._registered_key_import_status:
+                self._registered_key_import_status[ks]["imported"] = True
 
     def _dir_to_tuple(self, _dir_key):
         if isinstance(_dir_key, str):
@@ -771,115 +791,66 @@ class PsDataManager(dict):
             self.stack_all_data(stack_keys, pad_missing_data)
         self.mask_data = mask_data
 
-    # def get_diff(
-    #     self,
-    #     key,
-    #     return_absolute=False,
-    #     return_relative=True,
-    #     diff_loc="differential_idx",
-    #     diff_key="differential_idx",
-    #     nom_loc="nominal_idx",
-    #     nom_key="nominal_idx",
-    #     filter_nans=True,
-    #     data_key_list=None,
-    #     directories=None,
-    #     exact_keys=False,
-    #     num_keys=None,
-    #     match_accuracy=0.9,
-    # ):
+    def check_import_status(self, raise_error=False):
+        """Check if all registered keys have been imported.
 
-    #     for instance in self.PsDataImportInstances:
-    #         instance.get_data(
-    #             data_key_list=data_key_list,
-    #             directories=directories,
-    #             num_keys=num_keys,
-    #             exact_keys=exact_keys,
-    #             match_accuracy=match_accuracy,
-    #             PsDataManager=self,
-    #         )
+        Logs any return keys that were not found during import and
+        displays the top 10 nearest available keys from each
+        PsDataImportInstance to help the user identify typos or
+        alternative key names.
 
-    #         sweep_reference_raw = instance._get_data_set(
-    #             nom_key,
-    #             main_loc=nom_loc,
-    #             sub_key="value",
-    #         )
+        Args:
+            raise_error: if True, raise a KeyError after reporting
+                         missing keys.
+        """
+        missing_keys = {
+            return_key: status["file_key"]
+            for return_key, status in self._registered_key_import_status.items()
+            if not status["imported"]
+        }
+        if not missing_keys:
+            _logger.info("All registered keys were successfully imported.")
+            return
 
-    #         sweep_reference = np.array(
-    #             sweep_reference_raw[sweep_reference_raw == sweep_reference_raw],
-    #             dtype=int,
-    #         )
+        _logger.warning(
+            "{} registered key(s) were NOT imported.".format(len(missing_keys))
+        )
 
-    #         diff_reference_raw = instance._get_data_set(
-    #             diff_key,
-    #             main_loc=diff_loc,
-    #             sub_key="value",
-    #         )
+        for return_key, file_key in missing_keys.items():
+            _logger.warning(
+                "  return_key='{}' (filekey='{}') was not imported.".format(
+                    return_key, file_key
+                )
+            )
+            for idx, instance in enumerate(self.PsDataImportInstances):
+                available_keys = instance.unique_data_keys
+                nearest = difflib.get_close_matches(
+                    file_key, available_keys, n=10, cutoff=0.3
+                )
+                if nearest:
+                    _logger.warning(
+                        "    Nearest available keys in file {} (instance {}): {}".format(
+                            getattr(instance, "h5_fileLocation", None)
+                            or getattr(instance, "json_fileLocation", None),
+                            idx,
+                            nearest,
+                        )
+                    )
+                else:
+                    _logger.warning(
+                        "    No similar keys found in file {} (instance {})".format(
+                            getattr(instance, "h5_fileLocation", None)
+                            or getattr(instance, "json_fileLocation", None),
+                            idx,
+                        )
+                    )
 
-    #         absolute_data = instance._get_data_set(
-    #             key,
-    #             main_loc="outputs",
-    #             sub_key="value",
-    #         )
-
-    #         delta_result = np.zeros(diff_reference_raw.shape) * np.nan
-
-    #         for i in sweep_reference:
-    #             sweep_idx = np.where(i == sweep_reference_raw)[0][0]
-    #             diff_idx = np.where(i == diff_reference_raw)[0]  # [0]
-    #             if return_absolute:
-    #                 delta_result[diff_idx] = (
-    #                     absolute_data[diff_idx] - absolute_data[sweep_idx]
-    #                 )
-    #             elif return_relative:
-    #                 # NOTE This assumes a decrease is a good this. Which works for LCOW, but may not work for all data.
-    #                 delta_result[diff_idx] = (
-    #                     (absolute_data[sweep_idx] - absolute_data[diff_idx])
-    #                     / absolute_data[sweep_idx]
-    #                     * 100
-    #                 )
-    #             else:
-    #                 # NOTE If an increase is a good thing, then this is correct. Regardless, this relative change is difficult to handle and VOI will be forced positive in get_voi
-    #                 delta_result[diff_idx] = (
-    #                     (absolute_data[diff_idx] - absolute_data[sweep_idx])
-    #                     / absolute_data[diff_idx]
-    #                     * 100
-    #                 )
-
-    #         if filter_nans:
-    #             return delta_result[delta_result == delta_result]
-    #         else:
-    #             return delta_result
-
-    # def get_voi(self, yaml_file=None):
-    #     """
-    #     Calculate the Value of Information (VOI) based on LCOW and performance parameters from a YAML file.
-    #     This can be done better but this is a quick and dirty implementation.
-    #     """
-    #     yaml_file = yaml.safe_load(open(yaml_file, "r"))
-
-    #     # Get the top-level key from the YAML file
-    #     tree_top = list(yaml_file.keys())[0]
-    #     # Get the list of sweep parameters from the YAML file
-    #     sweeps = list(yaml_file[tree_top]["diff_param_loop"].keys())[:-1]
-
-    #     results_dict = {}
-    #     for sweep in sweeps:
-    #         results_dict[sweep] = {}
-    #         param = yaml_file[tree_top]["diff_param_loop"][sweep]["param"]
-    #         del_lcow = self.get_diff(
-    #             "fs.costing.LCOW", directories=sweep, return_relative=True
-    #         )
-    #         del_performance = self.get_diff(
-    #             param, directories=sweep, return_relative=False, return_absolute=False
-    #         )
-    #         voi = del_lcow / del_performance
-    #         if np.all(voi < 0):
-    #             voi = np.abs(voi)
-    #         results_dict[sweep]["fs.costing.LCOW"] = del_lcow
-    #         results_dict[sweep][param] = del_performance
-    #         results_dict[sweep]["VOI"] = voi
-
-    #     return results_dict
+        if raise_error:
+            raise KeyError(
+                "The following registered keys were not imported: {}".format(
+                    list(missing_keys.keys())
+                )
+            )
 
 
 class psDataManager(PsDataManager):
