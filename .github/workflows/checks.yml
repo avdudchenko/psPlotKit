@@ -78,7 +78,6 @@ jobs:
       - if: matrix.install-mode == 'dev'
         name: Install via psplotkit.yaml
         run: |
-          git config --system core.longpaths true
           conda env update --file psplotkit.yml
           pip list
       - if: matrix.coverage
