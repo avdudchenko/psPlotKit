@@ -1,3 +1,5 @@
+To use, import psPlotKit
+
 ## PsDataManager
 
 PsDataManager is the central data store for importing, inspecting, and
@@ -15,7 +17,7 @@ expressions → call load_data().
     # Register the data keys you want to import.
     # file_key  : the key as it appears in the .h5 file
     # return_key: the short name you will use to refer to the data
-    dm.register_data_key(file_key="fs.costing.LCOW",  return_key="LCOW")
+    dm.register_data_key("fs.costing.LCOW",  "LCOW")
     dm.register_data_key("fs.water_recovery", "recovery", units="%")
     dm.register_data_key(
         "fs.costing.reverse_osmosis.membrane_cost",
@@ -27,7 +29,6 @@ expressions → call load_data().
     #   1. checks that every registered key was found  (check_import_status)
     #   2. evaluates any registered expressions         (evaluate_expressions)
     dm.load_data()
-
 
 All three post-load steps can be controlled individually:
 
@@ -50,67 +51,39 @@ All three post-load steps can be controlled individually:
 
     # Show only the unique directory keys
     dm.display_directories()
-If the file has a single directory generated paramter sweep tool, it will have three sub-directories (outputs, solve_successful, sweep_params) that data manager will import data directly and no sub-directories will exist and can be viewed by calling     
-
-Resulting in: 
-
-    PsDataManager 00:27:31 INFO: ---Displaying current data content---
-    PsDataManager 00:27:31 INFO: data_key: LCOW
-    PsDataManager 00:27:31 INFO: data_key: membrane_cost
-    PsDataManager 00:27:31 INFO: -----------Contents end----------
-
-If a loop_tool is used for example and multiple directories exist, it will look like this:
-
-    PsDataManager 00:25:58 INFO: ---Displaying current data content---
-    PsDataManager 00:25:58 INFO: data_key: (('erd_type', 'pressure_exchanger'), 'membrane_cost', 'LCOW')
-    PsDataManager 00:25:58 INFO: data_key: (('erd_type', 'pressure_exchanger'), 'membrane_cost', 'membrane_cost')
-    PsDataManager 00:25:58 INFO: data_key: (('erd_type', 'pressure_exchanger'), 'membrane_group', 'LCOW')
-    PsDataManager 00:25:58 INFO: data_key: (('erd_type', 'pressure_exchanger'), 'membrane_group', 'membrane_cost')
-    PsDataManager 00:25:58 INFO: data_key: (('erd_type', 'pump_as_turbine'), 'membrane_cost', 'LCOW')
-    PsDataManager 00:25:58 INFO: data_key: (('erd_type', 'pump_as_turbine'), 'membrane_cost', 'membrane_cost')
-    PsDataManager 00:25:58 INFO: data_key: (('erd_type', 'pump_as_turbine'), 'membrane_group', 'LCOW')
-    PsDataManager 00:25:58 INFO: data_key: (('erd_type', 'pump_as_turbine'), 'membrane_group', 'membrane_cost')
-    PsDataManager 00:25:58 INFO: -----------Contents end----------
-
-### Deal with bad imports
-
-The file_key is the name of they key saved in the .h5 and or .json file. It is easy to not get it right. If you use standard load_data method, the load will fail and a error will be raised, it will include missing file_keys that were not imported and closest matches, something like this:
-
-    # import bad data key 
-    data_manager.register_data_key(
-            "fs.costing.reDer_osmosis.membrane_cost", "membrane cost"
-        )
-
-The error wil look like this:
-
-    PsDataManager 00:36:06 WARNING: 1 registered key(s) were NOT imported.
-    PsDataManager 00:36:06 WARNING:   return_key='membrane cost' (filekey='fs.costing.reDer_osmosis.membrane_cost') was not imported.
-    PsDataManager 00:36:06 WARNING:     Nearest available keys in file D:\github\psPlotKit\src\psPlotKit\data_manager\tests\multi_dir_test.h5 (instance 0):
-    PsDataManager 00:36:06 WARNING:       fs.costing.reverse_osmosis.membrane_cost
-    PsDataManager 00:36:06 WARNING:       fs.costing.reverse_osmosis.factor_membrane_replacement
 
 ### Registering and evaluating expressions
 
 Expressions let you derive new data from already-imported keys using
-arithmetic (+, -, *, /) and parentheses. The expression string uses the
-return_keys you chose during registration.
+Python arithmetic operators.  Instead of writing expression strings, you
+build expression trees with the ExpressionNode / ExpressionKeys API.
 
     dm = PsDataManager("my_sweep_results.h5")
 
     dm.register_data_key("fs.costing.LCOW", "LCOW")
     dm.register_data_key("fs.water_recovery", "recovery")
 
-    # Register an expression — the result will be stored under the
+    # Obtain an ExpressionKeys helper — attribute access returns
+    # ExpressionNode leaves that can be combined with +, -, *, /, **.
+    ek = dm.get_expression_keys()
+
+    # Build an expression tree — the result will be stored under
     # return_key "cost_per_recovery" in every directory that contains
     # both "LCOW" and "recovery".
     dm.register_expression(
-        "LCOW / recovery",
+        ek.LCOW / ek.recovery,
         return_key="cost_per_recovery",
+    )
+
+    # Complex expressions with constants, power, and grouping
+    dm.register_expression(
+        100 * (ek.LCOW + ek.LCOW) ** 2 / ek.recovery,
+        return_key="custom_metric",
     )
 
     # You can also assign units to the result
     dm.register_expression(
-        "(LCOW + LCOW) * recovery",
+        ek.LCOW * ek.recovery,
         return_key="weighted_metric",
         assign_units="USD",
     )
@@ -120,6 +93,10 @@ return_keys you chose during registration.
 
     # The expression results are now available just like any other key
     dm.display()
+
+Note: string expressions are no longer supported — pass an ExpressionNode
+tree instead.  If you pass a string you will get a TypeError with
+instructions for migrating.
 
 ### Accessing and computing on data directly
 
@@ -131,9 +108,6 @@ perform arithmetic on PsData objects directly.
     dir_key = dm.directory_keys[0]
     lcow = dm.get_data(dir_key, "LCOW")
 
-    # You can also access it as a regular dicitonary
-    lcow = dm[dir_key, "LCOW]
-
     # Access the raw numpy array
     print(lcow.data)          # e.g. array([0.45, 0.52, 0.61, ...])
 
@@ -143,10 +117,26 @@ perform arithmetic on PsData objects directly.
     # Convert units
     lcow.to_units("USD/gal")
 
-    # PsData supports arithmetic — results are new PsData objects
+    # PsData supports full arithmetic — results are new PsData objects
     recovery = dm.get_data(dir_key, "recovery")
+
+    # Basic operations between two PsData objects
     ratio = lcow / recovery
     double_lcow = lcow + lcow
+
+    # Scalar operations (int/float on either side)
+    scaled = lcow * 100
+    shifted = lcow + 0.5
+    inverted = 1.0 / recovery        # reflected operator
+
+    # Power
+    squared = lcow ** 2
+
+    # Negation
+    negative = -lcow
+
+    # Chain arbitrarily complex expressions
+    result = 100 * (lcow + recovery) ** 2 / recovery
 
     # The result carries a descriptive data_key
     print(ratio.data_key)      # "(LCOW / recovery)"
@@ -154,14 +144,10 @@ perform arithmetic on PsData objects directly.
     # Store a computed result back into the manager
     dm.add_data(dir_key, "my_ratio", ratio)
 
+This is a toolkit for plotting data generated using Paramter sweep toll
 
-# Installation 
-
-To install:
-
-    pip install git+https://github.com/avdudchenko/psPlotKit.git
-
-Install via conda env for development after cloning the repo:
+To install download repo:
+Install via pip or create new env for development:
     
     conda env create -f psPlotKit.yml
 

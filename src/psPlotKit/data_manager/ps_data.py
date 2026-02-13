@@ -309,24 +309,52 @@ class PsData:
     # ---------- arithmetic operations ----------
 
     def _arithmetic_op(self, other, op, symbol):
-        """Perform an arithmetic operation between two PsData objects.
+        """Perform an arithmetic operation between a PsData and another operand.
 
         Uses data_with_units so the quantities library handles unit
         compatibility and propagation.  Returns a new PsData whose
         data_key describes the operation performed.
 
         Args:
-            other: another PsData instance.
-            op: callable that takes (self.data_with_units, other.data_with_units).
-            symbol: string like '+', '-', '*', '/' used in the result data_key.
+            other: another PsData instance or a numeric scalar (int/float).
+            op: callable that takes two operands (quantities arrays or scalars).
+            symbol: string like '+', '-', '*', '/', '**' used in the result data_key.
         """
-        if not isinstance(other, PsData):
+        if isinstance(other, PsData):
+            other_val = other.data_with_units
+            other_label = other.data_key
+        elif isinstance(other, (int, float, np.integer, np.floating)):
+            other_val = other
+            other_label = str(other)
+        else:
             raise TypeError(
-                "Arithmetic operations require two PsData objects, "
-                "got {}".format(type(other))
+                "Arithmetic operations require a PsData object or numeric "
+                "scalar, got {}".format(type(other))
             )
-        result_quantity = op(self.data_with_units, other.data_with_units)
-        result_key = "({} {} {})".format(self.data_key, symbol, other.data_key)
+        result_quantity = op(self.data_with_units, other_val)
+        result_key = "({} {} {})".format(self.data_key, symbol, other_label)
+        return PsData(
+            data_key=result_key,
+            data_type="arithmetic_result",
+            data_array=result_quantity,
+        )
+
+    def _r_arithmetic_op(self, other, op, symbol):
+        """Reflected arithmetic: *other* ``<op>`` *self*.
+
+        Called when the left operand does not know how to handle PsData
+        (e.g. ``2 * ps_data``).
+        """
+        if isinstance(other, (int, float, np.integer, np.floating)):
+            other_val = other
+            other_label = str(other)
+        else:
+            raise TypeError(
+                "Arithmetic operations require a PsData object or numeric "
+                "scalar, got {}".format(type(other))
+            )
+        result_quantity = op(other_val, self.data_with_units)
+        result_key = "({} {} {})".format(other_label, symbol, self.data_key)
         return PsData(
             data_key=result_key,
             data_type="arithmetic_result",
@@ -336,14 +364,57 @@ class PsData:
     def __add__(self, other):
         return self._arithmetic_op(other, lambda a, b: a + b, "+")
 
+    def __radd__(self, other):
+        return self._r_arithmetic_op(other, lambda a, b: a + b, "+")
+
     def __sub__(self, other):
         return self._arithmetic_op(other, lambda a, b: a - b, "-")
+
+    def __rsub__(self, other):
+        return self._r_arithmetic_op(other, lambda a, b: a - b, "-")
 
     def __mul__(self, other):
         return self._arithmetic_op(other, lambda a, b: a * b, "*")
 
+    def __rmul__(self, other):
+        return self._r_arithmetic_op(other, lambda a, b: a * b, "*")
+
     def __truediv__(self, other):
         return self._arithmetic_op(other, lambda a, b: a / b, "/")
+
+    def __rtruediv__(self, other):
+        return self._r_arithmetic_op(other, lambda a, b: a / b, "/")
+
+    def __pow__(self, other):
+        return self._arithmetic_op(other, lambda a, b: a**b, "**")
+
+    def __rpow__(self, other):
+        """Reflected power: ``other ** self``.
+
+        Uses raw magnitudes because the ``quantities`` library cannot raise
+        to an array of non-uniform exponents.
+        """
+        if isinstance(other, (int, float, np.integer, np.floating)):
+            result_data = other**self.data
+            result_key = "({} ** {})".format(other, self.data_key)
+            return PsData(
+                data_key=result_key,
+                data_type="arithmetic_result",
+                data_array=result_data,
+            )
+        raise TypeError(
+            "Arithmetic operations require a PsData object or numeric "
+            "scalar, got {}".format(type(other))
+        )
+
+    def __neg__(self):
+        result_quantity = -1 * self.data_with_units
+        result_key = "(-{})".format(self.data_key)
+        return PsData(
+            data_key=result_key,
+            data_type="arithmetic_result",
+            data_array=result_quantity,
+        )
 
 
 class psData(PsData):

@@ -3,6 +3,7 @@ import os
 import numpy as np
 from psPlotKit.data_manager.ps_data_manager import PsDataManager
 from psPlotKit.data_manager.ps_data import PsData
+from psPlotKit.data_manager.ps_expression import ExpressionNode, ExpressionKeys
 
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
@@ -40,8 +41,9 @@ class TestSingleDirDataImport:
         """Test that loading a file with only one directory works and marks keys."""
         data_manager_single_dir.register_data_key("output_c", "LCOW")
         data_manager_single_dir.register_data_key("output_c", "LCOW2")
+        ek = data_manager_single_dir.get_expression_keys()
         data_manager_single_dir.register_expression(
-            "LCOW + LCOW2", return_key="LCOW_sum"
+            ek.LCOW + ek.LCOW2, return_key="LCOW_sum"
         )
         data_manager_single_dir.load_data()
         data_manager_single_dir.display()
@@ -310,51 +312,147 @@ class TestEndToEnd:
 class TestRegisterExpression:
     def test_register_stores_expression(self, data_manager):
         """register_expression should append to _registered_expressions."""
-        data_manager.register_expression("a + b", return_key="sum_ab")
+        data_manager.register_data_key("LCOW", "a")
+        data_manager.register_data_key("LCOW", "b")
+        ek = data_manager.get_expression_keys()
+        data_manager.register_expression(ek.a + ek.b, return_key="sum_ab")
 
         assert len(data_manager._registered_expressions) == 1
         entry = data_manager._registered_expressions[0]
-        assert entry["expression"] == "a + b"
+        assert isinstance(entry["expression"], ExpressionNode)
         assert entry["return_key"] == "sum_ab"
 
     def test_register_multiple_expressions(self, data_manager):
         """Multiple registrations should all be tracked."""
-        data_manager.register_expression("a + b", return_key="sum")
-        data_manager.register_expression("a * b", return_key="product")
-        data_manager.register_expression("a / b", return_key="ratio")
+        data_manager.register_data_key("LCOW", "a")
+        data_manager.register_data_key("LCOW", "b")
+        ek = data_manager.get_expression_keys()
+        data_manager.register_expression(ek.a + ek.b, return_key="sum")
+        data_manager.register_expression(ek.a * ek.b, return_key="product")
+        data_manager.register_expression(ek.a / ek.b, return_key="ratio")
 
         assert len(data_manager._registered_expressions) == 3
 
     def test_register_with_units(self, data_manager):
         """units and assign_units should be stored."""
+        data_manager.register_data_key("LCOW", "a")
+        data_manager.register_data_key("LCOW", "b")
+        ek = data_manager.get_expression_keys()
         data_manager.register_expression(
-            "a - b", return_key="diff", units="m", assign_units="km"
+            ek.a - ek.b, return_key="diff", units="m", assign_units="km"
         )
         entry = data_manager._registered_expressions[0]
         assert entry["units"] == "m"
         assert entry["assign_units"] == "km"
 
+    def test_string_expression_raises_type_error(self, data_manager):
+        """Passing a string expression should raise a TypeError."""
+        with pytest.raises(TypeError, match="String expressions are no longer"):
+            data_manager.register_expression("a + b", return_key="sum_ab")
 
-class TestParseExpressionKeys:
-    def test_simple_addition(self):
-        keys = PsDataManager._parse_expression_keys("LCOW + recovery")
-        assert keys == ["LCOW", "recovery"]
+    def test_non_node_expression_raises_type_error(self, data_manager):
+        """Passing something other than ExpressionNode should raise TypeError."""
+        with pytest.raises(TypeError, match="ExpressionNode"):
+            data_manager.register_expression(42, return_key="bad")
 
-    def test_all_operators(self):
-        keys = PsDataManager._parse_expression_keys("a + b - c * d / e")
-        assert keys == ["a", "b", "c", "d", "e"]
 
-    def test_parentheses(self):
-        keys = PsDataManager._parse_expression_keys("(a + b) * c")
-        assert keys == ["a", "b", "c"]
+# ---------- ExpressionNode / ExpressionKeys ----------
 
-    def test_no_duplicates(self):
-        keys = PsDataManager._parse_expression_keys("a + a + b")
-        assert keys == ["a", "b"]
 
-    def test_whitespace_handling(self):
-        keys = PsDataManager._parse_expression_keys("  a  +  b  ")
-        assert keys == ["a", "b"]
+class TestExpressionKeys:
+    def test_getattr_returns_node(self):
+        ek = ExpressionKeys(["LCOW", "recovery"])
+        node = ek.LCOW
+        assert isinstance(node, ExpressionNode)
+        assert node.key == "LCOW"
+
+    def test_missing_attr_raises(self):
+        ek = ExpressionKeys(["LCOW"])
+        with pytest.raises(AttributeError, match="not a registered"):
+            _ = ek.nonexistent
+
+    def test_get_expression_keys_from_manager(self, data_manager):
+        data_manager.register_data_key("LCOW", "LCOW")
+        data_manager.register_data_key("LCOW", "recovery")
+        ek = data_manager.get_expression_keys()
+        assert isinstance(ek, ExpressionKeys)
+        assert isinstance(ek.LCOW, ExpressionNode)
+        assert isinstance(ek.recovery, ExpressionNode)
+
+
+class TestExpressionNode:
+    def test_add_builds_tree(self):
+        a = ExpressionNode._key_node("a")
+        b = ExpressionNode._key_node("b")
+        expr = a + b
+        assert expr.op == "+"
+        assert expr.left.key == "a"
+        assert expr.right.key == "b"
+
+    def test_sub_builds_tree(self):
+        a = ExpressionNode._key_node("a")
+        b = ExpressionNode._key_node("b")
+        expr = a - b
+        assert expr.op == "-"
+
+    def test_mul_builds_tree(self):
+        a = ExpressionNode._key_node("a")
+        b = ExpressionNode._key_node("b")
+        expr = a * b
+        assert expr.op == "*"
+
+    def test_div_builds_tree(self):
+        a = ExpressionNode._key_node("a")
+        b = ExpressionNode._key_node("b")
+        expr = a / b
+        assert expr.op == "/"
+
+    def test_pow_builds_tree(self):
+        a = ExpressionNode._key_node("a")
+        expr = a**2
+        assert expr.op == "**"
+        assert expr.right.value == 2
+
+    def test_scalar_left_mul(self):
+        a = ExpressionNode._key_node("a")
+        expr = 100 * a
+        assert expr.op == "*"
+        assert expr.left.value == 100
+
+    def test_scalar_right_add(self):
+        a = ExpressionNode._key_node("a")
+        expr = a + 5
+        assert expr.op == "+"
+        assert expr.right.value == 5
+
+    def test_complex_expression(self):
+        """100 * (a + b) ** 2 / c should build a valid tree."""
+        a = ExpressionNode._key_node("a")
+        b = ExpressionNode._key_node("b")
+        c = ExpressionNode._key_node("c")
+        expr = 100 * (a + b) ** 2 / c
+        assert isinstance(expr, ExpressionNode)
+        assert expr.required_keys == {"a", "b", "c"}
+
+    def test_required_keys(self):
+        a = ExpressionNode._key_node("a")
+        b = ExpressionNode._key_node("b")
+        expr = (a + b) * a
+        assert expr.required_keys == {"a", "b"}
+
+    def test_repr(self):
+        a = ExpressionNode._key_node("a")
+        b = ExpressionNode._key_node("b")
+        expr = a + b
+        assert "a" in repr(expr)
+        assert "b" in repr(expr)
+        assert "+" in repr(expr)
+
+    def test_neg(self):
+        a = ExpressionNode._key_node("a")
+        expr = -a
+        assert expr.op == "*"
+        assert expr.left.value == -1
 
 
 class TestEvaluateExpressions:
@@ -362,7 +460,10 @@ class TestEvaluateExpressions:
         """LCOW + LCOW2 (same units) should produce a result in each directory."""
         data_manager.register_data_key("LCOW", "LCOW")
         data_manager.register_data_key("LCOW", "LCOW2")
-        data_manager.register_expression("LCOW + LCOW2", return_key="lcow_plus_lcow2")
+        ek = data_manager.get_expression_keys()
+        data_manager.register_expression(
+            ek.LCOW + ek.LCOW2, return_key="lcow_plus_lcow2"
+        )
         data_manager.load_data()
 
         result_keys = [k for k in data_manager.keys() if "lcow_plus_lcow2" in str(k)]
@@ -378,7 +479,10 @@ class TestEvaluateExpressions:
         """Subtraction expression should work with compatible units."""
         data_manager.register_data_key("LCOW", "LCOW")
         data_manager.register_data_key("LCOW", "LCOW2")
-        data_manager.register_expression("LCOW - LCOW2", return_key="lcow_minus_lcow2")
+        ek = data_manager.get_expression_keys()
+        data_manager.register_expression(
+            ek.LCOW - ek.LCOW2, return_key="lcow_minus_lcow2"
+        )
         data_manager.load_data()
 
         result_keys = [k for k in data_manager.keys() if "lcow_minus_lcow2" in str(k)]
@@ -390,8 +494,9 @@ class TestEvaluateExpressions:
         data_manager.register_data_key(
             "fs.costing.reverse_osmosis.membrane_cost", "membrane_cost"
         )
+        ek = data_manager.get_expression_keys()
         data_manager.register_expression(
-            "LCOW * membrane_cost", return_key="lcow_times_mc"
+            ek.LCOW * ek.membrane_cost, return_key="lcow_times_mc"
         )
         data_manager.load_data()
 
@@ -404,31 +509,68 @@ class TestEvaluateExpressions:
         data_manager.register_data_key(
             "fs.costing.reverse_osmosis.membrane_cost", "membrane_cost"
         )
+        ek = data_manager.get_expression_keys()
         data_manager.register_expression(
-            "LCOW / membrane_cost", return_key="lcow_per_mc"
+            ek.LCOW / ek.membrane_cost, return_key="lcow_per_mc"
         )
         data_manager.load_data()
 
         result_keys = [k for k in data_manager.keys() if "lcow_per_mc" in str(k)]
         assert len(result_keys) > 0
 
-    def test_parenthesized_expression(self, data_manager):
-        """Parenthesized expression should respect order of operations."""
+    def test_power_expression(self, data_manager):
+        """Power expression with a scalar exponent should work."""
+        data_manager.register_data_key("LCOW", "LCOW")
+        ek = data_manager.get_expression_keys()
+        data_manager.register_expression(ek.LCOW**2, return_key="lcow_squared")
+        data_manager.load_data()
+
+        result_keys = [k for k in data_manager.keys() if "lcow_squared" in str(k)]
+        assert len(result_keys) > 0
+
+        dir_key = data_manager.directory_keys[0]
+        lcow = data_manager.get_data(dir_key, "LCOW")
+        result = data_manager.get_data(dir_key, "lcow_squared")
+        np.testing.assert_array_almost_equal(result.data, lcow.data**2)
+
+    def test_scalar_multiply_expression(self, data_manager):
+        """Scalar * key expression should work — e.g. 100 * LCOW."""
+        data_manager.register_data_key("LCOW", "LCOW")
+        ek = data_manager.get_expression_keys()
+        data_manager.register_expression(100 * ek.LCOW, return_key="lcow_x100")
+        data_manager.load_data()
+
+        dir_key = data_manager.directory_keys[0]
+        lcow = data_manager.get_data(dir_key, "LCOW")
+        result = data_manager.get_data(dir_key, "lcow_x100")
+        np.testing.assert_array_almost_equal(result.data, 100 * lcow.data)
+
+    def test_complex_expression(self, data_manager):
+        """100 * (LCOW + LCOW2) ** 2 should work end-to-end."""
         data_manager.register_data_key("LCOW", "LCOW")
         data_manager.register_data_key("LCOW", "LCOW2")
+        ek = data_manager.get_expression_keys()
         data_manager.register_expression(
-            "(LCOW + LCOW2) * LCOW", return_key="complex_expr"
+            100 * (ek.LCOW + ek.LCOW2) ** 2, return_key="complex_expr"
         )
         data_manager.load_data()
 
         result_keys = [k for k in data_manager.keys() if "complex_expr" in str(k)]
         assert len(result_keys) > 0
 
+        dir_key = data_manager.directory_keys[0]
+        lcow = data_manager.get_data(dir_key, "LCOW")
+        lcow2 = data_manager.get_data(dir_key, "LCOW2")
+        result = data_manager.get_data(dir_key, "complex_expr")
+        expected = 100 * (lcow.data + lcow2.data) ** 2
+        np.testing.assert_array_almost_equal(result.data, expected)
+
     def test_expression_numerical_correctness(self, data_manager):
         """Verify the expression result matches manual arithmetic."""
         data_manager.register_data_key("LCOW", "LCOW")
         data_manager.register_data_key("LCOW", "LCOW2")
-        data_manager.register_expression("LCOW + LCOW2", return_key="manual_sum")
+        ek = data_manager.get_expression_keys()
+        data_manager.register_expression(ek.LCOW + ek.LCOW2, return_key="manual_sum")
         data_manager.load_data()
 
         # Pick the first directory and verify manually
@@ -444,9 +586,10 @@ class TestEvaluateExpressions:
         """If a key in the expression doesn't exist in a directory,
         a warning should be logged and that directory skipped."""
         data_manager.register_data_key("LCOW", "LCOW")
-        data_manager.register_expression(
-            "LCOW + nonexistent_key", return_key="bad_expr"
-        )
+        ek = data_manager.get_expression_keys()
+        # Manually build an expression that references a non-existent key
+        nonexistent = ExpressionNode._key_node("nonexistent_key")
+        data_manager.register_expression(ek.LCOW + nonexistent, return_key="bad_expr")
 
         import logging
 
@@ -466,7 +609,9 @@ class TestEvaluateExpressions:
         """If no directory can satisfy the expression, warn that zero
         directories were evaluated."""
         data_manager.register_data_key("LCOW", "LCOW")
-        data_manager.register_expression("fake_a + fake_b", return_key="totally_fake")
+        fake_a = ExpressionNode._key_node("fake_a")
+        fake_b = ExpressionNode._key_node("fake_b")
+        data_manager.register_expression(fake_a + fake_b, return_key="totally_fake")
 
         import logging
 
@@ -488,7 +633,8 @@ class TestEvaluateExpressions:
         """The expression should be evaluated once per unique directory."""
         data_manager.register_data_key("LCOW", "LCOW")
         data_manager.register_data_key("LCOW", "LCOW2")
-        data_manager.register_expression("LCOW + LCOW2", return_key="per_dir_sum")
+        ek = data_manager.get_expression_keys()
+        data_manager.register_expression(ek.LCOW + ek.LCOW2, return_key="per_dir_sum")
         data_manager.load_data()
 
         num_dirs_with_both = 0
@@ -509,8 +655,9 @@ class TestEvaluateExpressions:
         data_manager.register_data_key(
             "fs.costing.reverse_osmosis.membrane_cost", "membrane_cost"
         )
+        ek = data_manager.get_expression_keys()
         data_manager.register_expression(
-            "LCOW * membrane_cost",
+            ek.LCOW * ek.membrane_cost,
             return_key="with_assign",
             assign_units="USD",
         )
@@ -525,8 +672,9 @@ class TestEvaluateExpressions:
         """Multiple registered expressions should all be evaluated."""
         data_manager.register_data_key("LCOW", "LCOW")
         data_manager.register_data_key("LCOW", "LCOW2")
-        data_manager.register_expression("LCOW + LCOW2", return_key="expr_sum")
-        data_manager.register_expression("LCOW - LCOW2", return_key="expr_diff")
+        ek = data_manager.get_expression_keys()
+        data_manager.register_expression(ek.LCOW + ek.LCOW2, return_key="expr_sum")
+        data_manager.register_expression(ek.LCOW - ek.LCOW2, return_key="expr_diff")
         data_manager.load_data()
         data_manager.display()
         sum_keys = [k for k in data_manager.keys() if "expr_sum" in str(k)]

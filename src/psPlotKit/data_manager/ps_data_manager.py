@@ -8,7 +8,7 @@ import copy
 import yaml
 import warnings
 import difflib
-import re
+from psPlotKit.data_manager.ps_expression import ExpressionNode, ExpressionKeys
 
 __author__ = "Alexander V. Dudchenko (SLAC)"
 
@@ -145,6 +145,21 @@ class PsDataManager(dict):
             "file_key": file_key,
             "imported": False,
         }
+
+    def get_expression_keys(self):
+        """Return an :class:`ExpressionKeys` object with all registered return_keys.
+
+        Attribute access on the returned object yields :class:`ExpressionNode`
+        leaves that can be combined with arithmetic operators to build
+        expression trees for :meth:`register_expression`.
+
+        Example::
+
+            ek = dm.get_expression_keys()
+            dm.register_expression(ek.LCOW / ek.recovery,
+                                   return_key='cost_per_recovery')
+        """
+        return ExpressionKeys(self._registered_key_import_status.keys())
 
     def display(self):
         """func to show file data content in a clean manner"""
@@ -864,23 +879,42 @@ class PsDataManager(dict):
     ):
         """Register an arithmetic expression to be evaluated on imported data.
 
-        The expression is written in terms of **return_keys** used during
-        ``register_data_key`` (not raw file keys).  Standard arithmetic
-        operators ``+``, ``-``, ``*``, ``/`` and parentheses are supported.
+        The *expression* must be an :class:`ExpressionNode` tree built from
+        keys returned by :meth:`get_expression_keys`.  Standard arithmetic
+        operators ``+``, ``-``, ``*``, ``/``, ``**`` and numeric constants
+        are supported.
 
-        Example:
-            >>> dm.register_data_key('LCOW', 'LCOW')
-            >>> dm.register_data_key('fs.water_recovery', 'recovery')
-            >>> dm.register_expression('LCOW / recovery', return_key='cost_per_recovery')
-            >>> dm.load_data()
-            >>> dm.evaluate_expressions()
+        Example::
+
+            ek = dm.get_expression_keys()
+            dm.register_expression(100 * (ek.LCOW + ek.LCOW) ** 2 / ek.recovery,
+                                   return_key='custom_metric')
 
         Args:
-            expression: arithmetic expression string using return_keys.
+            expression: an :class:`ExpressionNode` built using arithmetic on
+                        expression keys.
             return_key: key under which the result will be stored.
             units: (optional) units to convert the result to after evaluation.
             assign_units: (optional) units to assign to the result.
+
+        Raises:
+            TypeError: if *expression* is a string or anything other than an
+                       :class:`ExpressionNode`.
         """
+        if isinstance(expression, str):
+            raise TypeError(
+                "String expressions are no longer supported.  "
+                "Use get_expression_keys() to build an ExpressionNode tree.  "
+                "Example: ek = dm.get_expression_keys(); "
+                "dm.register_expression(ek.LCOW / ek.recovery, return_key='ratio')"
+            )
+        if not isinstance(expression, ExpressionNode):
+            raise TypeError(
+                "expression must be an ExpressionNode, got {}.  "
+                "Use get_expression_keys() to build expressions.".format(
+                    type(expression)
+                )
+            )
         self._registered_expressions.append(
             {
                 "expression": expression,
@@ -889,22 +923,6 @@ class PsDataManager(dict):
                 "assign_units": assign_units,
             }
         )
-
-    @staticmethod
-    def _parse_expression_keys(expression):
-        """Extract the data-key tokens from an expression string.
-
-        Splits on arithmetic operators and parentheses, strips whitespace,
-        and returns the list of unique non-empty tokens (the return_keys
-        referenced by the expression).
-        """
-        tokens = re.split(r"[+\-*/()]", expression)
-        keys = []
-        for t in tokens:
-            t = t.strip()
-            if t and t not in keys:
-                keys.append(t)
-        return keys
 
     def evaluate_expressions(self):
         """Evaluate all registered expressions across every unique directory.
@@ -927,47 +945,52 @@ class PsDataManager(dict):
             return_key = expr_def["return_key"]
             units = expr_def["units"]
             assign_units = expr_def["assign_units"]
-            required_keys = self._parse_expression_keys(expression)
+            required_keys = expression.required_keys
 
             evaluated_count = 0
             for dir_key in self.directory_keys:
-                # Resolve each token to a PsData in this directory
-                local_vars = {}
+                # Resolve each referenced key to a PsData in this directory
+                data_dict = {}
                 all_found = True
+                missing_key = None
                 for rk in required_keys:
                     try:
-                        local_vars[rk] = self.get_data(dir_key, rk)
+                        data_dict[rk] = self.get_data(dir_key, rk)
                     except KeyError:
                         all_found = False
+                        missing_key = rk
                         break
 
                 if not all_found:
                     _logger.warning(
-                        "Expression '{}': skipping directory '{}' — "
-                        "could not find key '{}'".format(expression, dir_key, rk)
-                    )
-                    continue
-
-                # Evaluate the expression using the PsData arithmetic ops
-                try:
-                    result = eval(expression, {"__builtins__": {}}, local_vars)
-                except Exception as e:
-                    _logger.warning(
-                        "Expression '{}' failed in directory '{}': {}".format(
-                            expression, dir_key, e
+                        "Expression for '{}': skipping directory '{}' — "
+                        "could not find key '{}'".format(
+                            return_key, dir_key, missing_key
                         )
                     )
                     continue
 
-                # Wrap raw numeric results in a PsData
-                if not isinstance(result, PsData):
-                    result = PsData(
-                        return_key,
-                        "expression_result",
-                        np.array(result),
+                # Evaluate the expression tree
+                try:
+                    result_quantity = expression.evaluate(data_dict)
+                except Exception as e:
+                    _logger.warning(
+                        "Expression for '{}' failed in directory '{}': {}".format(
+                            return_key, dir_key, e
+                        )
                     )
+                    continue
 
-                # Override data_key to the user-specified return_key
+                # Wrap the result in a PsData
+                result = PsData(
+                    data_key=return_key,
+                    data_type="expression_result",
+                    data_array=(
+                        result_quantity
+                        if hasattr(result_quantity, "magnitude")
+                        else np.atleast_1d(np.asarray(result_quantity))
+                    ),
+                )
                 result.data_key = return_key
                 result.data_label = return_key
 
@@ -981,13 +1004,13 @@ class PsDataManager(dict):
 
             if evaluated_count == 0:
                 _logger.warning(
-                    "Expression '{}' (return_key='{}') was not evaluated in "
-                    "any directory.".format(expression, return_key)
+                    "Expression for return_key='{}' was not evaluated in "
+                    "any directory.".format(return_key)
                 )
             else:
                 _logger.info(
-                    "Expression '{}' evaluated in {} directory(ies) as '{}'.".format(
-                        expression, evaluated_count, return_key
+                    "Expression evaluated in {} directory(ies) as '{}'.".format(
+                        evaluated_count, return_key
                     )
                 )
 

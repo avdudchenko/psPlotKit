@@ -150,9 +150,14 @@ class TestAddition:
         result = meter_ps + second_meter_ps
         assert "m" in str(result.data_with_units.dimensionality)
 
-    def test_add_non_psdata_raises(self, meter_ps):
-        with pytest.raises(TypeError, match="PsData"):
-            meter_ps + 5
+    def test_add_scalar(self):
+        a = PsData("val", "test", [10.0, 20.0, 30.0])
+        result = a + 5
+        np.testing.assert_array_almost_equal(result.data, [15.0, 25.0, 35.0])
+
+    def test_add_invalid_type_raises(self, meter_ps):
+        with pytest.raises(TypeError):
+            meter_ps + "not_a_number"
 
 
 # ---------- arithmetic: subtraction ----------
@@ -174,7 +179,7 @@ class TestSubtraction:
         assert isinstance(result, PsData)
 
     def test_sub_non_psdata_raises(self, meter_ps):
-        with pytest.raises(TypeError, match="PsData"):
+        with pytest.raises(TypeError):
             meter_ps - [1, 2, 3]
 
 
@@ -199,9 +204,13 @@ class TestMultiplication:
         result = meter_ps * factor
         assert isinstance(result, PsData)
 
-    def test_mul_non_psdata_raises(self, meter_ps):
-        with pytest.raises(TypeError, match="PsData"):
-            meter_ps * 3.0
+    def test_mul_scalar(self, meter_ps):
+        result = meter_ps * 3.0
+        np.testing.assert_array_almost_equal(result.data, [30.0, 60.0, 90.0])
+
+    def test_mul_invalid_type_raises(self, meter_ps):
+        with pytest.raises(TypeError):
+            meter_ps * "bad"
 
 
 # ---------- arithmetic: division ----------
@@ -228,9 +237,13 @@ class TestDivision:
         result = meter_ps / divisor
         np.testing.assert_array_almost_equal(result.data, [5.0, 10.0, 15.0])
 
-    def test_div_non_psdata_raises(self, meter_ps):
-        with pytest.raises(TypeError, match="PsData"):
-            meter_ps / 2.0
+    def test_div_scalar(self, meter_ps):
+        result = meter_ps / 2.0
+        np.testing.assert_array_almost_equal(result.data, [5.0, 10.0, 15.0])
+
+    def test_div_invalid_type_raises(self, meter_ps):
+        with pytest.raises(TypeError):
+            meter_ps / "bad"
 
 
 # ---------- chained arithmetic ----------
@@ -280,3 +293,92 @@ class TestArithmeticWithQuantityInput:
         b = PsData("b", "test", qs.Quantity([4.0, 5.0], "dimensionless"))
         result = a * b
         np.testing.assert_array_almost_equal(result.data, [8.0, 15.0])
+
+
+# ---------- arithmetic: power ----------
+
+
+class TestPower:
+    def test_pow_scalar_exponent(self, meter_ps):
+        result = meter_ps**2
+        np.testing.assert_array_almost_equal(result.data, [100.0, 400.0, 900.0])
+
+    def test_pow_returns_psdata(self, meter_ps):
+        result = meter_ps**2
+        assert isinstance(result, PsData)
+
+    def test_pow_data_key(self, meter_ps):
+        result = meter_ps**2
+        assert "**" in result.data_key
+        assert "2" in result.data_key
+
+    def test_rpow(self):
+        """2 ** PsData should work when PsData is dimensionless."""
+        a = PsData("exp", "test", [1.0, 2.0, 3.0])
+        result = 2**a
+        np.testing.assert_array_almost_equal(result.data, [2.0, 4.0, 8.0])
+
+
+# ---------- arithmetic: reverse operators ----------
+
+
+class TestReverseOps:
+    def test_radd(self):
+        a = PsData("val", "test", [10.0, 20.0, 30.0])
+        result = 5 + a
+        np.testing.assert_array_almost_equal(result.data, [15.0, 25.0, 35.0])
+
+    def test_rsub(self):
+        a = PsData("val", "test", [10.0, 20.0, 30.0])
+        result = 100 - a
+        np.testing.assert_array_almost_equal(result.data, [90.0, 80.0, 70.0])
+
+    def test_rmul(self, meter_ps):
+        result = 3 * meter_ps
+        np.testing.assert_array_almost_equal(result.data, [30.0, 60.0, 90.0])
+
+    def test_rtruediv(self):
+        a = PsData("val", "test", [2.0, 4.0, 5.0])
+        result = 100 / a
+        np.testing.assert_array_almost_equal(result.data, [50.0, 25.0, 20.0])
+
+    def test_rmul_data_key(self, meter_ps):
+        result = 100 * meter_ps
+        assert "100" in result.data_key
+        assert "*" in result.data_key
+
+
+# ---------- arithmetic: negation ----------
+
+
+class TestNegation:
+    def test_neg(self, meter_ps):
+        result = -meter_ps
+        np.testing.assert_array_almost_equal(result.data, [-10.0, -20.0, -30.0])
+
+    def test_neg_returns_psdata(self, meter_ps):
+        result = -meter_ps
+        assert isinstance(result, PsData)
+
+    def test_neg_data_key(self, meter_ps):
+        result = -meter_ps
+        assert "-" in result.data_key
+
+
+# ---------- complex scalar expressions ----------
+
+
+class TestComplexScalarExpressions:
+    def test_100_times_sum_squared_div(self):
+        """100 * (a + b) ** 2 / c should work with PsData directly."""
+        a = PsData("a", "test", [1.0, 2.0, 3.0])
+        b = PsData("b", "test", [2.0, 3.0, 4.0])
+        c = PsData("c", "test", [10.0, 10.0, 10.0])
+        result = 100 * (a + b) ** 2 / c
+        expected = 100 * (np.array([1, 2, 3]) + np.array([2, 3, 4])) ** 2 / 10.0
+        np.testing.assert_array_almost_equal(result.data, expected)
+
+    def test_scalar_sub_and_div(self):
+        a = PsData("a", "test", [10.0, 20.0, 30.0])
+        result = (a - 5) / 2
+        np.testing.assert_array_almost_equal(result.data, [2.5, 7.5, 12.5])
