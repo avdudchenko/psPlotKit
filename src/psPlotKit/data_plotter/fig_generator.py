@@ -19,6 +19,13 @@ from scipy.interpolate import (
 )
 
 from psPlotKit.util.logger import define_logger
+from psPlotKit.data_plotter.plot_data_storage import (
+    LineDataStorage,
+    ErrorBarDataStorage,
+    MapDataStorage,
+    BarDataStorage,
+    BoxDataStorage,
+)
 from matplotlib.colors import ListedColormap
 import math
 import copy
@@ -28,6 +35,12 @@ _logger = define_logger(__name__, "FigureGenerator", level="INFO")
 
 
 class FigureGenerator:
+    """Matplotlib wrapper for generating publication-quality figures.
+
+    Provides methods for line, bar, scatter, box, area, and map/contour plots
+    with automatic color cycling, data logging, and CSV export.
+    """
+
     def __init__(
         self,
         font_size=10,
@@ -37,8 +50,22 @@ class FigureGenerator:
         file_name="figure",
         figure_description="Figure generated with AnalysisWaterTAP tools",
         svg_font_setting="none",
+        save_data=False,
         **kwargs,
     ):
+        """Initialize figure generator with default styling and color settings.
+
+        Args:
+            font_size: Base font size for text elements.
+            label_size: Font size for axis labels.
+            colormap: Name of the colormap to use for plot colors.
+            save_location: Directory path for saving figures.
+            file_name: Default file name for saved figures.
+            figure_description: Description included in exported CSV files.
+            svg_font_setting: SVG font type setting ('none' or 'path').
+            save_data: If True, automatically create a data storage object
+                on first plot call and export plotted data to CSV on save.
+        """
         self.colorMaps = {
             "qualitative_a": [
                 "#a6cee3",
@@ -84,14 +111,50 @@ class FigureGenerator:
         self.map_x_width = None
         self.map_y_width = None
         self.plotted_data = {}
+        self.save_data = save_data
+        self.data_storage = None
         self.save_location = save_location
         self.file_name = file_name
         self.figure_description = figure_description
         self.twinx, self.twiny = False, False
 
+    def _init_data_storage(self, storage_class):
+        """Lazily initialise ``data_storage`` on first plot call.
+
+        If *save_data* is ``True`` and no storage object exists yet, create
+        one of *storage_class*.  If a storage of a different type already
+        exists, log a warning and leave it unchanged so that the first
+        plot type wins.
+
+        Args:
+            storage_class: One of the ``PlotDataStorage`` subclasses.
+        """
+        if not self.save_data:
+            return
+        if self.data_storage is None:
+            self.data_storage = storage_class()
+        elif not isinstance(self.data_storage, storage_class):
+            _logger.warning(
+                "data_storage is already a {}, ignoring request for {}".format(
+                    type(self.data_storage).__name__, storage_class.__name__
+                )
+            )
+
     def gen_colormap(
         self, num_samples=10, vmin=0, vmax=1, map_name="viridis", return_map=False
     ):
+        """Generate a colormap with a specified number of discrete color samples.
+
+        Args:
+            num_samples: Number of discrete colors to sample.
+            vmin: Minimum value for scalar mapping normalization.
+            vmax: Maximum value for scalar mapping normalization.
+            map_name: Name of the matplotlib colormap.
+            return_map: If True, return colors and ScalarMappable tuple.
+
+        Returns:
+            Colors and ScalarMappable tuple if return_map, else the colormap object.
+        """
         map_object = matplotlib.colormaps.get_cmap(map_name)
         colors = map_object(list(range(num_samples)))
         self.colorMaps[map_name] = colors
@@ -119,7 +182,22 @@ class FigureGenerator:
         projection=None,
         **kwargs,
     ):
-        # Creat figure and axist to plot on
+        """Initialize a matplotlib figure and axes.
+
+        Args:
+            width: Figure width in inches.
+            height: Figure height in inches.
+            dpi: Figure resolution in dots per inch.
+            nrows: Number of subplot rows.
+            ncols: Number of subplot columns.
+            sharex: Whether subplots share the x-axis.
+            sharey: Whether subplots share the y-axis.
+            twinx: If True, create a twin x-axis.
+            twiny: If True, create a twin y-axis.
+            grid: If set, overrides ncols and enables shared y-axis.
+            subplot_adjust: Horizontal spacing between subplots.
+            projection: Axes projection type (e.g., '3d').
+        """
         if grid is not None:
             sharey = True
             ncols = grid
@@ -131,7 +209,6 @@ class FigureGenerator:
                 ncols,
                 sharex=sharex,
                 sharey=sharey,
-                # subplot_kw={"projection": projection},
             )
         else:
             self.mode_3d = True
@@ -154,7 +231,6 @@ class FigureGenerator:
             self.current_color_index = []
             for ax in self.ax:
                 self.current_color_index.append(0)
-        # Set figrue DPI
         if twinx:
             self.ax = [self.ax[0], self.ax[0].twiny()]
             self.twinx = True
@@ -164,15 +240,22 @@ class FigureGenerator:
         if subplot_adjust is not None:
             self.fig.subplots_adjust(wspace=subplot_adjust)
         self.fig.set_dpi(dpi)
-        # Set figure size
         self.fig.set_size_inches(width, height, forward=True)
 
     def get_color(self, ax, val_update=0):
+        """Get the current color index for the given axis and optionally advance it.
+
+        Args:
+            ax: Axis index or (row, col) tuple for multi-dimensional subplots.
+            val_update: Amount to advance the color index after retrieval.
+
+        Returns:
+            Integer color index into the current colormap.
+        """
         if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
             self.current_color_index[ax[0]][ax[1]] += val_update
             return int(self.current_color_index[ax[0]][ax[1]])
         else:
-            # print(ax, self.current_color_index)
             self.current_color_index[ax] += val_update
             return int(self.current_color_index[ax])
 
@@ -193,11 +276,28 @@ class FigureGenerator:
         vertical=True,
         linewidth=1,
         save_label=None,
+        log_data=True,
         zorder=4,
         ecolor="black",
         capsize=4,
         **kwargs,
     ):
+        """Plot a bar (vertical or horizontal) on the figure.
+
+        Args:
+            x_pos: Position(s) of the bar(s) along the category axis.
+            x_value: Height(s) or width(s) of the bar(s).
+            xerr: Error bar sizes in the x direction.
+            yerr: Error bar sizes in the y direction.
+            bottom: Starting position for stacked bars.
+            width: Bar width (or height for horizontal bars).
+            color: Bar fill color; auto-selected from colormap if None.
+            ax_idx: Axis index to plot on.
+            label: Legend label.
+            vertical: If True, plot vertical bars; otherwise horizontal.
+            save_label: Key for storing plotted data; defaults to label.
+            log_data: If True, store plotted data for CSV export.
+        """
         self.box_mode = True
         if color is None:
             color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
@@ -221,7 +321,6 @@ class FigureGenerator:
                 label=label,
                 zorder=zorder,
                 ecolor=ecolor,
-                # elinewidth=elinewidth,
                 capsize=capsize,
             )
         else:
@@ -240,16 +339,24 @@ class FigureGenerator:
                 label=label,
                 zorder=zorder,
                 ecolor=ecolor,
-                # elinewidth=elinewidth,
                 capsize=capsize,
             )
-        if save_label is None:
-            save_label = label
-        try:
-            right_val = x_value + bottom
-        except:
-            right_val = None
-        self.plotted_data.update({save_label: {"box_data": [bottom, right_val]}})
+        if log_data:
+            if save_label is None:
+                save_label = label
+            try:
+                right_val = x_value + bottom
+            except (TypeError, ValueError):
+                right_val = None
+            self._init_data_storage(BarDataStorage)
+            if self.data_storage is not None and isinstance(
+                self.data_storage, BarDataStorage
+            ):
+                self.data_storage.register_data(
+                    save_label if save_label else str(x_pos),
+                    bottom if bottom is not None else 0,
+                    right_val if right_val is not None else x_value,
+                )
 
     def plot_area(
         self,
@@ -269,13 +376,25 @@ class FigureGenerator:
         alpha=1,
         **kwargs,
     ):
+        """Plot a filled area between curves.
+
+        Args:
+            xdata: X-coordinates for the boundary.
+            ydata: Y-coordinates for the primary boundary.
+            x2data: Second x-boundary for horizontal fill (fill_betweenx).
+            y2data: Second y-boundary for vertical fill (fill_between).
+            color: Fill color; auto-selected from colormap if None.
+            edgecolor: Color of the area edges.
+            ax_idx: Axis index to plot on.
+            label: Legend label.
+            save_label: Key for storing plotted data; defaults to label.
+            alpha: Fill transparency (0-1).
+        """
         if color is None:
             color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
             self.get_color(ax_idx, 1)
         elif isinstance(color, int):
             color = self.colorMaps[self.colormaps][color]
-        else:
-            color = color
         if y2data is not None:
             self.get_axis(ax_idx).fill_between(
                 xdata,
@@ -285,7 +404,6 @@ class FigureGenerator:
                 edgecolor=edgecolor,
                 hatch=hatch,
                 linewidth=linewidth,
-                # label=label,
                 zorder=zorder,
                 clip_on=clip_on,
                 alpha=alpha,
@@ -299,7 +417,6 @@ class FigureGenerator:
                 edgecolor=edgecolor,
                 hatch=hatch,
                 linewidth=linewidth,
-                # label=label,
                 zorder=zorder,
                 clip_on=clip_on,
                 alpha=alpha,
@@ -319,8 +436,6 @@ class FigureGenerator:
             clip_on=clip_on,
             alpha=alpha,
         )
-        if save_label is None:
-            save_label = label
 
     def plot_line(
         self,
@@ -331,7 +446,6 @@ class FigureGenerator:
         marker_types=["o", "d", "s", ">", "<"],
         marker_overlay_labels=None,
         label="",
-        ylabel=None,
         marker="",
         markersize=3,
         markerfacecolor="white",
@@ -346,6 +460,21 @@ class FigureGenerator:
         log_data=True,
         **kwargs,
     ):
+        """Plot a line with optional marker overlays.
+
+        Args:
+            xdata: X-coordinates.
+            ydata: Y-coordinates.
+            marker_overlay: Data array for assigning different markers to segments.
+            marker_ranges: Boundaries for marker overlay binning.
+            marker_types: Marker styles for each overlay bin.
+            marker_overlay_labels: Labels for each marker overlay segment.
+            label: Legend label.
+            color: Line color; auto-selected from colormap if None.
+            ax_idx: Axis index to plot on.
+            sort_data: If True, sort data by x values before plotting.
+            log_data: If True, store plotted data for CSV export.
+        """
         if color is None:
             color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
             self.get_color(ax_idx, 1)
@@ -353,16 +482,14 @@ class FigureGenerator:
             color = self.colorMaps[self.colormaps][color]
         if sort_data and len(xdata) > 2:
             sort_idx = np.argsort(xdata)
-            # print(sort_idx, xdata, ydata)
             xdata = np.array(xdata)[sort_idx]
             ydata = np.array(ydata)[sort_idx]
-        # print(ax_idx, ydata)
         if self.map_mode:
             try:
                 xdata = self.map_func_x(xdata)
                 ydata = self.map_func_y(ydata)
-            except:
-                print("no map funcs, using raw data")
+            except (AttributeError, TypeError):
+                _logger.warning("No map functions available, using raw data")
         if marker_overlay is not None:
             self.get_axis(ax_idx).plot(
                 xdata,
@@ -378,7 +505,6 @@ class FigureGenerator:
                 markersize=markersize,
             )
             for i, k in enumerate(marker_ranges[1:]):
-                # print("overlay", marker_overlay, k, marker_ranges[i])
                 plot_range = np.where(
                     (marker_overlay < k) & (marker_overlay >= marker_ranges[i])
                 )[0]
@@ -417,17 +543,12 @@ class FigureGenerator:
             )
         if save_label is None:
             save_label = label
-        elif save_label is None and ylabel != None:
-            save_label = ylabel
         if log_data:
-            self.plotted_data.update(
-                {
-                    save_label: {
-                        "datax": xdata,
-                        "datay": ydata,
-                    }
-                }
-            )
+            self._init_data_storage(LineDataStorage)
+            if self.data_storage is not None and isinstance(
+                self.data_storage, LineDataStorage
+            ):
+                self.data_storage.register_data(save_label, xdata, ydata)
 
     def plot_scatter(
         self,
@@ -453,7 +574,24 @@ class FigureGenerator:
         digitize_levels=None,
         **kwargs,
     ):
-        # print(xdata, ydata, zdata)
+        """Plot a scatter plot, optionally with color-mapped z-data.
+
+        Args:
+            xdata: X-coordinates.
+            ydata: Y-coordinates.
+            zdata: Z-data for color mapping or 3D scatter.
+            ylabel: Y-axis label used as fallback save key.
+            label: Legend label.
+            marker: Marker style.
+            marker_size: Marker size in points squared.
+            vmin: Minimum value for color normalization.
+            vmax: Maximum value for color normalization.
+            color: Marker color; auto-selected if None and no zdata.
+            plot_flat_scatter: Axes string ('xyz') for 3D flat projections.
+            log_data: If True, store plotted data for CSV export.
+            save_label: Key for storing plotted data.
+            digitize_levels: Levels for discretizing zdata colors.
+        """
         if self.projection == None:
             if zdata is None:
                 if color is None:
@@ -553,21 +691,15 @@ class FigureGenerator:
                         marker=marker,
                     )
         if log_data:
-            # print(label, ylabel)
             if save_label is None and label != "":
                 save_label = label
             elif save_label is None and ylabel != None:
                 save_label = ylabel
-            # print(save_label, label, ylabel)
-            self.plotted_data.update(
-                {
-                    save_label: {
-                        "datax": xdata,
-                        "datay": ydata,
-                        "dataz": zdata,
-                    }
-                }
-            )
+            self._init_data_storage(LineDataStorage)
+            if self.data_storage is not None and isinstance(
+                self.data_storage, LineDataStorage
+            ):
+                self.data_storage.register_data(save_label, xdata, ydata)
 
     def plot_errorbar(
         self,
@@ -592,11 +724,27 @@ class FigureGenerator:
         save_label=None,
         zorder=1,
     ):
+        """Plot data points with error bars.
+
+        Args:
+            xdata: X-coordinates.
+            ydata: Y-coordinates.
+            xerr: Error values in the x direction.
+            yerr: Error values in the y direction.
+            label: Legend label.
+            marker: Marker style.
+            markersize: Marker size in points.
+            ecolor: Error bar color.
+            elinewidth: Error bar line width.
+            capsize: Error bar cap size.
+            capthick: Error bar cap thickness.
+            color: Data point color; auto-selected from colormap if None.
+            log_data: If True, store plotted data for CSV export.
+            save_label: Key for storing plotted data; defaults to label.
+        """
         if color is None:
             color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
             self.get_color(ax_idx, 1)
-        else:
-            color = color
         self.colorFig = self.get_axis(ax_idx).errorbar(
             xdata,
             ydata,
@@ -612,7 +760,6 @@ class FigureGenerator:
             capsize=capsize,
             capthick=capthick,
             ls=ls,
-            # facecolors=markerfacecolor,
             vmin=vmin,
             vmax=vmax,
             zorder=zorder,
@@ -620,27 +767,29 @@ class FigureGenerator:
 
         if save_label is None:
             save_label = label
-        elif (
-            save_label is None and ylabel != None
-        ):  # TODO: Pylance says ylabel is not defined
-            save_label = ylabel
         if log_data:
-            self.plotted_data.update(
-                {
-                    save_label: {
-                        "datax": xdata,
-                        "datay": ydata,
-                    }
-                }
-            )
-            if xerr is not None:
-                self.plotted_data[save_label]["xerr"] = xerr
-            if yerr is not None:
-                self.plotted_data[save_label]["yerr"] = yerr
+            self._init_data_storage(ErrorBarDataStorage)
+            if self.data_storage is not None and isinstance(
+                self.data_storage, ErrorBarDataStorage
+            ):
+                self.data_storage.register_data(
+                    save_label, xdata, ydata, xerr=xerr, yerr=yerr
+                )
 
     def plot_cdf(
         self, data, color=None, num_bins=100, label="", ls="-", lw=2, ax_idx=0
     ):
+        """Plot a cumulative distribution function.
+
+        Args:
+            data: Input data array.
+            color: Line color; auto-selected from colormap if None.
+            num_bins: Number of histogram bins.
+            label: Legend label.
+
+        Returns:
+            Tuple of (bin_edges, normalized_cdf).
+        """
         bins = np.linspace(min(data), max(data), num_bins)
         counts, binedges = np.histogram(data, bins=bins)
         cdf = np.cumsum(counts)
@@ -665,6 +814,16 @@ class FigureGenerator:
         plot_line=True,
         norm=True,
     ):
+        """Plot a histogram, optionally as a line plot.
+
+        Args:
+            data: Input data array.
+            color: Bar/line color; auto-selected from colormap if None.
+            num_bins: Number of histogram bins.
+            label: Legend label.
+            plot_line: If True, plot as a line; otherwise as a standard histogram.
+            norm: If True, normalize counts by the maximum value.
+        """
         if color is None:
             color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
             self.get_color(ax_idx, 1)
@@ -696,7 +855,24 @@ class FigureGenerator:
         hatch=None,
         label=None,
         save_label=None,
+        log_data=True,
     ):
+        """Plot a box-and-whisker diagram.
+
+        Args:
+            position: Position of the box along the category axis.
+            data: Data array for computing box statistics.
+            whiskers: Percentiles for whisker extent (e.g., [5, 95]).
+            width: Box width.
+            vertical: If True, plot vertical boxes.
+            showfliers: If True, show outlier points.
+            ax_idx: Axis index to plot on.
+            color: Box fill color; auto-selected from colormap if None.
+            hatch: Hatch pattern for the box fill.
+            label: Legend label.
+            save_label: Key for storing plotted data.
+            log_data: If True, store plotted data for CSV export.
+        """
         self.box_mode = True
         medianprops = {"color": "black", "linewidth": 1}
         if color is None:
@@ -704,8 +880,7 @@ class FigureGenerator:
             self.get_color(ax_idx, 1)
         elif isinstance(color, int):
             color = self.colorMaps[self.colormaps][color]
-            # print(color)
-        dt = self.get_axis(ax_idx).boxplot(
+        self.get_axis(ax_idx).boxplot(
             data,
             positions=[position],
             vert=vertical,
@@ -718,9 +893,19 @@ class FigureGenerator:
         )
         if label is not None:
             self.plot_bar([0], [0], color=color, hatch=hatch, label=label)
-        self.percentiles = np.percentile(data, [whiskers[0], 25, 50, 75, whiskers[1]])
-        if save_label is not None:
-            self.plotted_data.update({save_label: {"box_data": self.percentiles}})
+
+        if log_data:
+            self.percentiles = np.percentile(
+                data, [whiskers[0], 25, 50, 75, whiskers[1]]
+            )
+            self._init_data_storage(BoxDataStorage)
+            if self.data_storage is not None and isinstance(
+                self.data_storage, BoxDataStorage
+            ):
+                _box_label = (
+                    save_label if save_label else label if label else str(position)
+                )
+                self.data_storage.register_data(_box_label, data, whiskers=whiskers)
 
     def build_map_data(
         self,
@@ -732,34 +917,46 @@ class FigureGenerator:
         x_decimals=8,
         y_decimals=8,
     ):
+        """Build a 2D map array from scatter x, y, z data.
+
+        Args:
+            x: X-coordinate array.
+            y: Y-coordinate array.
+            z: Z-value array or 2D array.
+            x_uniqu: Pre-computed unique x values.
+            y_uniqu: Pre-computed unique y values.
+            x_decimals: Decimal precision for rounding x values.
+            y_decimals: Decimal precision for rounding y values.
+
+        Returns:
+            Tuple of (z_map, x_unique, y_unique).
+        """
         x = x.round(decimals=x_decimals)
         y = y.round(decimals=y_decimals)
-        # print(x.shape)
         if x_uniqu is None:
             x_uniqu = np.unique(x)
             y_uniqu = np.unique(y)
         z_map = np.empty((y_uniqu.shape[0], x_uniqu.shape[0]))
         z_map[:] = np.nan
-
-        xdata = []
-        ydata = []
-        # print(x_uniqu, y_uniqu)
         z = np.array(z)
-        # print(z.ndim, y.ndim, x.ndim)
         if z.ndim == 1:
             for i, iz in enumerate(z):
-                # print(x[i], y[i])
                 ix = np.where(abs(x[i] - np.array(x_uniqu)) < 1e-5)[0]
                 iy = np.where(abs(y[i] - np.array(y_uniqu)) < 1e-5)[0]
                 z_map[iy, ix] = iz
-                # print(ix, iy, iz, x[i], y[i])
         else:
             z_map = z
-        # print(z_map)
-        # print(x_uniqu, y_uniqu)
         return z_map, x_uniqu, y_uniqu
 
     def fix_nan_in_map(self, input_map):
+        """Interpolate NaN values in a 2D map using linear griddata.
+
+        Args:
+            input_map: 2D numpy array potentially containing NaN values.
+
+        Returns:
+            2D numpy array with NaN values filled by interpolation.
+        """
         x = np.array(range(input_map.shape[1]))
         y = np.array(range(input_map.shape[0]))
         mesh_grid_overall = np.array(np.meshgrid(x, y))
@@ -778,65 +975,6 @@ class FigureGenerator:
         else:
             new_map = input_map
         return new_map
-
-    def upscale_map(
-        self,
-        input_map,
-        upscale=1000,
-        x=None,
-        y=None,
-        upscale_x_range=None,
-        upscale_y_range=None,
-        mode="linear",
-    ):
-        if x is None:
-            x = np.array(range(input_map.shape[1]))
-            y = np.array(range(input_map.shape[0]))
-        # mesh_grid_overall = np.array(np.meshgrid(x, y))
-        # print(y)
-        if upscale_x_range is None:
-            ux = np.linspace(x[0], x[-1], upscale)
-            uy = np.linspace(y[0], y[-1], upscale)
-        else:
-            ux = upscale_x_range
-            uy = upscale_y_range
-
-        xy = np.array(np.meshgrid(ux, uy)).T.reshape((upscale * upscale, 2))
-        # print(input_map.shape, len(x), len(y))
-        # print(np.array(input_map))  # [np.array(input_map) == np.array(input_map)],
-        xx, yy = np.meshgrid(x, y)
-
-        # print(xx)
-        z = input_map[input_map == input_map]
-        nx = xx[input_map == input_map]
-        ny = yy[input_map == input_map]
-        if mode == "linear":
-            interp = LinearNDInterpolator(list(zip(nx, ny)), z)
-        if mode == "nearest":
-            interp = NearestNDInterpolator(list(zip(nx, ny)), z)
-        if mode == "cubic":
-            interp = CloughTocher2DInterpolator(
-                list(zip(nx, ny)), z, maxiter=1000, rescale=True, tol=1e-8
-            )
-        # if mode == "RBF":
-        #     interp = RBFInterpolator(list(zip(nx, ny)), z)
-        #
-        # NearestNDInterpolator
-        # interp = RegularGridInterpolator(
-        #     (x, y),
-        #     np.array(input_map)[np.array(input_map) == np.array(input_map)],
-        #     method="linear",
-        #     fill_value=None,
-        #     bounds_error=False,
-        # )
-        interp_points = interp(xy)
-
-        interp_map, uux, uuy = self.build_map_data(
-            x=xy[:, 0], y=xy[:, 1], x_uniqu=ux, y_uniqu=uy, z=interp_points
-        )
-        # print(interp_map.shape)
-        # print(interp_map)
-        return interp_map, uux, uuy
 
     def search_sequence_numpy(self, arr, seq):
         # source  https://stackoverflow.com/questions/36522220/searching-a-sequence-in-a-numpy-array
@@ -874,21 +1012,41 @@ class FigureGenerator:
     def plot_contour(
         self, ax, input_map, levels, colors="black", norm=None, mode="mod"
     ):
+        """Plot contour lines on the given axis.
+
+        Args:
+            ax: Matplotlib axes object.
+            input_map: 2D data array.
+            levels: Contour level values.
+            colors: Contour line colors.
+            norm: Color normalization instance.
+            mode: Contour mode identifier.
+
+        Returns:
+            Matplotlib ContourSet object.
+        """
         x = np.array(range(input_map.shape[1]))
         y = np.array(range(input_map.shape[0]))
 
         xx, yy = np.array(np.meshgrid(x, y))
-        # print(xx, levels)
-
         return ax.contour(
             xx, yy, input_map, levels, colors=colors, norm=norm, zlevel=12
         )
 
     def plot_linear_contours(self, ax, input_map, x, y, levels, upscale):
+        """Plot contour lines using linear polynomial fits.
+
+        Args:
+            ax: Matplotlib axes object.
+            input_map: 2D data array.
+            x: X-axis data (overridden by computed values).
+            y: Y-axis data (overridden by computed values).
+            levels: Contour level values.
+            upscale: Scale factor for axis coordinates.
+        """
         x = np.array(range(input_map.shape[1])) * upscale / input_map.shape[1]
         y = np.array(range(input_map.shape[0])) * upscale / input_map.shape[0]
 
-        # xx, yy = np.array(np.meshgrid(x,
         xx, yy = np.array(np.meshgrid(x, y))
         for l in levels:
             temp_map = np.zeros(input_map.shape)
@@ -897,15 +1055,11 @@ class FigureGenerator:
             loc_idxs = self.search_sequence_numpy(temp_map.flatten(), np.array([1, 2]))
             x_vals = xx.flatten()[loc_idxs]
             y_vals = yy.flatten()[loc_idxs]
-            # print(x_vals, y_vals)
             if len(x_vals) > 2:
                 fit = np.polyfit(x_vals, y_vals, deg=2)
                 xinterp = np.linspace(min(x), max(x), 100)
                 yinterp = np.poly1d(fit)(xinterp)
                 ax.plot(xinterp, yinterp, color="black", lw=1)
-                # print(self.search_sequence_numpy(temp_map.flatten(), np.array([1, 2])))
-                # print(temp_map)
-            # print(pos_x_h)
 
     def plot_contourf(
         self,
@@ -917,6 +1071,20 @@ class FigureGenerator:
         extend_colors=None,
         norm=None,
     ):
+        """Plot filled contours on the given axis.
+
+        Args:
+            ax: Matplotlib axes object.
+            input_map: 2D data array.
+            levels: Contour level values.
+            colors: Explicit fill colors; uses colormap if None.
+            extend: Extend coloring beyond levels ('min', 'max', or 'both').
+            extend_colors: Colors for extended regions.
+            norm: Color normalization instance.
+
+        Returns:
+            Matplotlib ContourSet object.
+        """
         x = np.array(range(input_map.shape[1]))
         y = np.array(range(input_map.shape[0]))
         xx, yy = np.array(np.meshgrid(x, y))
@@ -925,24 +1093,7 @@ class FigureGenerator:
             cmap = self.colorMaps["color_map"]
         else:
             cmap = None
-        # extend = None
-        # ("mas", np.nanmax(input_map))
-        # assaextend = "max"
-        # # extend = "max"
-        # if np.nanmin(input_map) < np.nanmin(levels):
-        #     extend = "min"
-        #     # cs.cmap.set_over(colors[0])
-        # if np.nanmax(input_map) > np.nanmax(levels):
-        #     extend = "max"
-        #     # cs.cmap.set_over(colors[-1])
-        # if np.nanmax(input_map) > np.nanmax(levels) and np.nanmin(
-        #     input_map
-        # ) < np.nanmin(levels):
-        #     extend = "both"
-        #     # cs.cmap.set_over(colors[0])
-        #     # cs.cmap.set_over(colors[-1])
 
-        # print("lvels", levels)
         cs = ax.contourf(
             xx,
             yy,
@@ -964,21 +1115,25 @@ class FigureGenerator:
         return cs
 
     def digitize_map(self, map_data, levels, colors):
-        # print(levels)
+        """Discretize map data into level bins and assign colormap colors.
+
+        Args:
+            map_data: Data array to digitize.
+            levels: Bin boundary values.
+            colors: Colors for each bin; auto-generated from colormap if None.
+
+        Returns:
+            Tuple of (vmin, vmax) for the digitized data range.
+        """
         for i, lu in enumerate(levels[1:]):
             lb, ub = levels[i], levels[i + 1]
-            average_level = i  # levels[i] * 0.5 + levels[i + 1] * 0.5
-            # print(len(map_data.shape))
+            average_level = i
             if len(map_data.shape) == 1:
                 idx = np.where((map_data < ub) & (map_data > lb))[0]
-                # print(idx)
-                # print(ub, lb, average_level)
                 map_data[idx] = average_level
             else:
                 for m in map_data:
                     idx = np.where((m < ub) & (m > lb))[0]
-                    # print(idx)
-                    # print(ub, lb, average_level)
                     m[idx] = average_level
         if colors is None:
             _colors = []
@@ -988,21 +1143,10 @@ class FigureGenerator:
                         l / (len(levels) - 1)
                     )
                 )
-            # print(colors)
         else:
             _colors = colors
-            # for c in colors:
-            #     if isinstance(c, str) and "#" in c:
-            #         c = c.strip("#")
-            #         _colors.append(tuple(int(c[i : i + 2], 16) for i in (0, 2, 4)))
-            #     else:
-            #         _colors.append(c)
-        print(_colors)
+        self.colorMaps["color_map"] = ListedColormap(_colors)
 
-        self.colorMaps["color_map"] = ListedColormap(_colors)  # len(levels))
-        # print(self.colorMaps["color_map"])
-
-        # print(map_data)
         self.digitized = True
         return 0, i + 1
 
@@ -1031,9 +1175,31 @@ class FigureGenerator:
         digitize_colors=None,
         unique_x_decimals=5,
         unique_y_decimals=5,
+        log_data=True,
         **kwargs,
     ):
-        # print(zoverlay, ydata, zdata)
+        """Plot a 2D heatmap/image with optional text annotations.
+
+        Args:
+            xdata: X-coordinates.
+            ydata: Y-coordinates.
+            zdata: Z-values for color mapping.
+            zoverlay: Optional overlay z-data for additional annotations.
+            vmin: Minimum color scale value.
+            vmax: Maximum color scale value.
+            aspect: Axes aspect ratio.
+            text: If True, annotate cells with values (for maps < 200 cells).
+            text_color: Cell text color; 'auto' selects based on value.
+            textfontsize: Font size for cell text.
+            sig_figs_text: Number of significant figures for cell text.
+            ax_idx: Axis index to plot on.
+            build_map: If True, build map from scatter data; else use zdata directly.
+            zscale: Color scale ('norm' or 'log').
+            fix_nans: If True, interpolate NaN values in the map.
+            label: Label for the map data.
+            digitize_levels: Levels for discretizing the color map.
+            digitize_colors: Colors for discretized levels.
+        """
         self.map_mode = True
         datax, datay = None, None
         if build_map:
@@ -1090,7 +1256,6 @@ class FigureGenerator:
         if text and map_data.size < 200:
             for r, row in enumerate(map_data):
                 for c, value in enumerate(row):
-                    # print(abs(value), ((vmax - vmin) / 2 + vmin))
                     if value < ((vmax - vmin) / 2 + vmin):
                         text_color = "white"
                     else:
@@ -1114,21 +1279,24 @@ class FigureGenerator:
                             color=text_color,
                             fontsize=textfontsize,
                         )
-        self.plotted_data.update(
-            {
-                "label": label,
-                "datax": datax,
-                "datay": datay,
-                "dataz": map_data,
-            }
-        )
+        self._init_data_storage(MapDataStorage)
+        if self.data_storage is not None and isinstance(
+            self.data_storage, MapDataStorage
+        ):
+            self.data_storage.register_data(datax, datay, map_data)
 
     def gen_map_function(self, axisdata, scale="linear"):
+        """Generate a mapping function from data values to pixel indices.
+
+        Args:
+            axisdata: Array of axis data values.
+            scale: Interpolation method ('linear', 'interp', or 'log').
+
+        Returns:
+            Callable mapping data values to pixel coordinates.
+        """
         indexes = np.array(range(len(axisdata)))
-        # print(axisdata, indexes, scale)
-        # print("axis data", axisdata, indexes, scale)
         if scale == "interp":
-            # print(axisdata[axisdata == axisdata], indexes[axisdata == axisdata])
             return scipy.interpolate.interp1d(
                 axisdata[axisdata == axisdata],
                 indexes[axisdata == axisdata],
@@ -1136,7 +1304,6 @@ class FigureGenerator:
                 fill_value="extrapolate",
             )
         if scale == "linear":
-            # print(np.polyfit(axisdata, indexes, deg=1))
             return np.poly1d(np.polyfit(axisdata, indexes, deg=1))
         if scale == "log":
 
@@ -1145,17 +1312,24 @@ class FigureGenerator:
 
             fit_params = scipy.optimize.curve_fit(log_func, axisdata, indexes)
             a, b = fit_params[0]
-            # print(a, b)
             return lambda x: a * np.log(x) - b
 
     def gen_minor_ticks(self, axisticks, strides=10):
+        """Generate minor tick positions for a logarithmic axis.
+
+        Args:
+            axisticks: Array of major tick values.
+            strides: Number of minor tick subdivisions per decade.
+
+        Returns:
+            List of minor tick positions (excluding major tick positions).
+        """
         minor_ticks = []
         return_ticks = []
         log_vmin = math.log(min(axisticks)) / math.log(10)
         log_vmax = math.log(max(axisticks)) / math.log(10)
 
         numdec = math.floor(log_vmax) - math.ceil(log_vmin)
-        # print(numdec, log_vmin, log_vmax, np.linspace(log_vmin, log_vmax, numdec))
 
         for k in np.arange(log_vmin, log_vmax, 1):
             minor_ticks += list(np.linspace(1, 10, strides) * 10**k)
@@ -1190,6 +1364,26 @@ class FigureGenerator:
         yscale="interp",
         **kwargs,
     ):
+        """Set custom tick labels and positions for map or categorical axes.
+
+        Args:
+            xticklabels: Labels for x-axis ticks.
+            yticklabels: Labels for y-axis ticks.
+            xticks: Explicit x-axis tick positions.
+            yticks: Explicit y-axis tick positions.
+            xlabel: X-axis label text.
+            ylabel: Y-axis label text.
+            xlims: X-axis limits as (min, max).
+            ylims: Y-axis limits as (min, max).
+            angle: Tick label rotation angle.
+            rotate: If True, rotate tick labels.
+            fontsize: Tick label font size.
+            ax_idx: Axis index to configure.
+            xformat: Format specification for x tick labels.
+            yformat: Format specification for y tick labels.
+            xscale: Scale for x-axis map function ('interp', 'linear', 'log').
+            yscale: Scale for y-axis map function ('interp', 'linear', 'log').
+        """
         if xticklabels is not None:
             if rotate == False:
                 angle = 0
@@ -1202,16 +1396,9 @@ class FigureGenerator:
             if va is None:
                 va = "top"
             if self.map_mode:
-                # print(
-                #     "dst",
-                #     self.plotted_data["datax"],
-                #     np.min(self.plotted_data["datax"]),
-                #     np.max(self.plotted_data["datax"]),
-                # )
-                # print("xticklabels", xticklabels)
-                self.map_func_x = self.gen_map_function(
-                    self.plotted_data["datax"], xscale
-                )
+
+                xdata = self.data_storage._data["x"]
+                self.map_func_x = self.gen_map_function(xdata, xscale)
                 if self.contour_mode:
                     offset_x = 0
                     offset_y = -1
@@ -1220,13 +1407,7 @@ class FigureGenerator:
                     offset_y = 0.5
 
                 ticks = self.map_func_x(xticklabels)
-                # print(xticklabels, ticks)
-                # print(offset_x, ticks[-1], ticks[-1] + offset_y)
                 self.get_axis(ax_idx).set_xlim(offset_x, ticks[-1] + offset_y)
-                # offset = 0.5 / self.map_x_width  # / 2
-                # print(offset)
-                # print(xticklabels)
-                # print("xticks", ticks)
                 self.get_axis(ax_idx).set_xticks(ticks)
                 if xscale == "log":
                     minor_ticks = self.gen_minor_ticks(xticklabels)
@@ -1262,7 +1443,6 @@ class FigureGenerator:
                 ha = "right"
             if va is None:
                 va = "center"
-            # print(self.map_mode)
             if self.map_mode:
                 if self.contour_mode:
                     offset_x = 0
@@ -1270,19 +1450,12 @@ class FigureGenerator:
                 else:
                     offset_x = -0.5
                     offset_y = 0.5
-                    # offset = -0.5
-                self.map_func_y = self.gen_map_function(
-                    self.plotted_data["datay"], yscale
-                )
+                ydata = self.data_storage._data["y"]
+                self.map_func_y = self.gen_map_function(ydata, yscale)
                 ticks = self.map_func_y(yticklabels)
                 self.get_axis(ax_idx).set_ylim(
                     offset_x + ticks[0], ticks[-1] + offset_y
                 )
-                # self.get_axis(ax_idx).set_ylim(offset_x, self.map_y_width + offset_y)
-                # print(self.plotted_data["datay"])
-
-                # ticks = self.map_func_y(yticklabels)
-                # print("tiks", ticks)
                 self.get_axis(ax_idx).set_yticks(ticks)
                 if yscale == "log":
                     minor_ticks = self.gen_minor_ticks(yticklabels)
@@ -1307,23 +1480,28 @@ class FigureGenerator:
                 rotation_mode=rotation_mode,
                 fontsize=fontsize,
             )
-            # if add_minor_ticks:
-            #     self.get_axis(ax_idx).yaxis.set_minor_locator(
-            #     ticker.FixedLocator([0.1, 0.2, 0.5])
-            # )
-        #   # self.get_axis(ax_idx).yaxis.set_minor_locator(ticker.ScalarFormatter())
-        #  self.get_axis(ax_idx).set_minor_xticks(ticks)
         if xlabel is not None:
             self.get_axis(ax_idx).set_xlabel(xlabel, labelpad=xlabelpad)
-            self.plotted_data.update({"xlabel": xlabel})
+            if self.data_storage is not None:
+                self.data_storage.update_labels(xlabel=xlabel)
         if ylabel is not None:
             self.get_axis(ax_idx).set_ylabel(ylabel, labelpad=ylabelpad)
-            self.plotted_data.update({"ylabel": ylabel})
+            if self.data_storage is not None:
+                self.data_storage.update_labels(ylabel=ylabel)
         self.get_axis(ax_idx).set_aspect(set_aspect)
 
     def set_fig_label(
         self, xlabel=None, ylabel=None, x_pad=-0.04, y_pad=0.05, label_size=12
     ):
+        """Set figure-level x and y labels outside the subplot area.
+
+        Args:
+            xlabel: Text for the figure x-label.
+            ylabel: Text for the figure y-label.
+            x_pad: Vertical position for the x-label.
+            y_pad: Horizontal position for the y-label.
+            label_size: Font size for the labels.
+        """
         if xlabel is not None:
             self.fig.text(
                 0.5,
@@ -1347,12 +1525,18 @@ class FigureGenerator:
             )
 
     def auto_gen_lims(self, data_stream):
+        """Compute min and max across all plotted data for a given data stream.
+
+        Args:
+            data_stream: Key name in plotted data dicts (e.g., 'datax', 'datay').
+
+        Returns:
+            Tuple of (min_value, max_value).
+        """
         data = []
-        # print(self.plotted_data)
         for key in self.plotted_data.keys():
             if key != "xlabel" and key != "ylabel":
                 if len(self.plotted_data[key]["datax"]) > 0:
-                    # print(key)
                     data += list(self.plotted_data[key][data_stream])
         v_min = min(data)
         v_max = max(data)
@@ -1388,7 +1572,29 @@ class FigureGenerator:
         yaxiscolor="black",
         **kwargs,
     ):
-        # print("got xticks", xticks)
+        """Configure axis limits, ticks, labels, scales, and colors.
+
+        Args:
+            xlims: X-axis limits as (min, max).
+            ylims: Y-axis limits as (min, max).
+            zlims: Z-axis limits for 3D plots.
+            xlabel: X-axis label text.
+            ylabel: Y-axis label text.
+            zlabel: Z-axis label text for 3D plots.
+            xticks: Explicit x-axis tick positions.
+            yticks: Explicit y-axis tick positions.
+            zticks: Explicit z-axis tick positions for 3D plots.
+            default_xticks: Number of auto-generated x ticks.
+            default_yticks: Number of auto-generated y ticks.
+            ax_idx: Axis index to configure.
+            xscale: X-axis scale type (e.g., 'log').
+            yscale: Y-axis scale type (e.g., 'log').
+            format_ticks: If True, apply tick formatting for log scales.
+            xformat: X tick format type ('fixed', 'scalar', 'g', '10').
+            yformat: Y tick format type ('fixed', 'scalar', 'g', '10').
+            xaxiscolor: Color for x-axis elements.
+            yaxiscolor: Color for y-axis elements.
+        """
         if xlims is not None:
             self.get_axis(ax_idx).set_xlim(xlims[0], xlims[1])
             if xticks is None:
@@ -1396,11 +1602,9 @@ class FigureGenerator:
                     xticks = np.geomspace(xlims[0], xlims[1], default_xticks)
                 else:
                     xticks = np.linspace(xlims[0], xlims[1], default_xticks)
-                # rint(xticks)
 
         if xticks is not None:
             self.get_axis(ax_idx).set_xticks(np.array(xticks))
-            # print("set xticks lims", xticks)
             if xlims is None:
                 self.get_axis(ax_idx).set_xlim(xticks[0], xticks[-1])
         if ylims is not None:
@@ -1416,24 +1620,22 @@ class FigureGenerator:
             self.get_axis(ax_idx).set_zticks(zticks)
             if zlims is None:
                 self.get_axis(ax_idx).set_zlim(zticks[0], zticks[-1])
-            # p#rint(yticks)
         if yticks is None and ylims is None:
             try:
                 ylims = self.auto_gen_lims("datay")
                 yticks = np.linspace(ylims[0], ylims[1], default_yticks)
                 self.get_axis(ax_idx).set_yticks(yticks)
                 self.get_axis(ax_idx).set_ylim(yticks[0], yticks[-1])
-                # print("set y lims", yticks)
-            except:
-                print("failed to auto gen yticks")
+            except (ValueError, KeyError):
+                _logger.warning("Failed to auto-generate y-axis ticks")
         if xticks is None and xlims is None:
             try:
                 xlims = self.auto_gen_lims("datax")
                 xticks = np.linspace(xlims[0], xlims[1], default_xticks)
                 self.get_axis(ax_idx).set_xticks(np.array(xticks))
                 self.get_axis(ax_idx).set_xlim(xticks[0], xticks[-1])
-            except:
-                print("failed to auto gen xticks")
+            except (ValueError, KeyError):
+                _logger.warning("Failed to auto-generate x-axis ticks")
 
         if xscale is not None:
             self.get_axis(ax_idx).set_xscale(xscale)
@@ -1467,7 +1669,6 @@ class FigureGenerator:
             self.get_axis(ax_idx).xaxis.set_minor_locator(
                 ticker.LogLocator(numticks=999, subs="auto")
             )
-        # self.get_axis(ax_idx).yaxis.set_major_locator(ticker.FixedLocator(yticks))
         if yscale is not None:
             self.get_axis(ax_idx).set_yscale(yscale)
             if yscale == "log" and format_ticks:
@@ -1505,17 +1706,20 @@ class FigureGenerator:
             self.get_axis(ax_idx).set_xlabel(
                 xlabel, labelpad=xlabelpad, rotation=xlabelrotate
             )
-            self.plotted_data.update({"xlabel": xlabel})
+            if self.data_storage is not None:
+                self.data_storage.update_labels(xlabel=xlabel)
         if ylabel is not None:
             self.get_axis(ax_idx).set_ylabel(
                 ylabel, labelpad=ylabelpad, rotation=ylabelrotate
             )
-            self.plotted_data.update({"ylabel": ylabel})
+            if self.data_storage is not None:
+                self.data_storage.update_labels(ylabel=ylabel)
         if zlabel is not None and self.mode_3d:
             self.get_axis(ax_idx).set_zlabel(
                 zlabel, labelpad=zlabelpad, rotation=zlabelrotate
             )
-            self.plotted_data.update({"ylabel": ylabel})
+            if self.data_storage is not None:
+                self.data_storage.update_labels(zlabel=zlabel)
         self.get_axis(ax_idx).set_aspect(set_aspect)
         if xaxiscolor is not None:
             self.get_axis(ax_idx).xaxis.label.set_color(xaxiscolor)
@@ -1531,12 +1735,19 @@ class FigureGenerator:
                 self.get_axis(ax_idx).spines["right"].set_color(yaxiscolor)
             else:
                 self.get_axis(ax_idx).spines["left"].set_color(yaxiscolor)
-        xaxiscolor = ("black",)
-        yaxiscolor = ("black",)
 
     def add_colorbar(
         self, zlabel, zticks=None, zformat=1, zlabelpad=17, cbar=None, **kwargs
     ):
+        """Add a colorbar to the figure.
+
+        Args:
+            zlabel: Label for the colorbar axis.
+            zticks: Tick positions on the colorbar.
+            zformat: Decimal format for colorbar tick labels.
+            zlabelpad: Label padding for the colorbar.
+            cbar: Optional pre-existing ScalarMappable; uses self.colorFig if None.
+        """
         if cbar == None:
             cfig = self.colorFig
         else:
@@ -1554,7 +1765,8 @@ class FigureGenerator:
             cbar.set_ticks(zticks)
         cbar.set_ticklabels(self.format_ticks(zticks, zformat))
         cbar.set_label(zlabel, rotation=-90, labelpad=zlabelpad)
-        self.plotted_data.update({"zlabel": zlabel})
+        if self.data_storage is not None:
+            self.data_storage.update_labels(zlabel=zlabel)
 
     def add_legend(
         self,
@@ -1567,6 +1779,16 @@ class FigureGenerator:
         reverse_legend=False,
         **kwargs,
     ):
+        """Add a legend to the figure.
+
+        Args:
+            loc: Legend location string.
+            fontsize: Legend font size.
+            ax_idx: Axis index to attach the legend to.
+            bbox_to_anchor: Bounding box anchor for legend positioning.
+            ncol: Number of legend columns.
+            reverse_legend: If True, reverse the order of legend entries.
+        """
         handles, labels = self.get_axis(ax_idx).get_legend_handles_labels()
         if reverse_legend:
             handles, labels = handles[::-1], labels[::-1]
@@ -1585,34 +1807,88 @@ class FigureGenerator:
         )
 
     def get_axis(self, idx):
+        """Return the matplotlib axes object for the given index.
+
+        Args:
+            idx: Integer axis index or (row, col) tuple.
+
+        Returns:
+            Matplotlib Axes object.
+        """
         if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
-            # print(self, self.ax, idx)
             return self.ax[idx[0], idx[1]]
         else:
             return self.ax[idx]
 
     def remove_ticks(self, ax_idx=0, y_axis=None, x_axis=None):
+        """Hide tick marks and labels for the specified axes.
+
+        Args:
+            ax_idx: Axis index.
+            y_axis: If True, hide y-axis ticks and labels.
+            x_axis: If True, hide x-axis ticks and labels.
+        """
         if y_axis is True:
             self.get_axis(ax_idx).axes.yaxis.set_visible(False)
         if x_axis is True:
             self.get_axis(ax_idx).axes.xaxis.set_visible(False)
 
     def format_value(self, value, decimals):
+        """Format a numeric value to the specified number of decimal places.
+
+        Args:
+            value: Numeric value to format.
+            decimals: Number of decimal places (0 returns integer string).
+
+        Returns:
+            Formatted string representation.
+        """
         if decimals == 0:
             return str(int(round(value, 0)))
         else:
             return str(round(value, decimals))
 
     def format_ticks(self, ticks, decimals):
+        """Format a list of tick values to the specified decimal places.
+
+        Args:
+            ticks: List of numeric tick values.
+            decimals: Number of decimal places for formatting.
+
+        Returns:
+            List of formatted tick label strings.
+        """
         return [self.format_value(tick, decimals) for tick in ticks]
 
-    def save_fig(self, name="output_fig"):
-        self.fig.savefig(name + ".jpg", dpi=300, bbox_inches="tight", pad_inches=0.1)
-        self.fig.savefig(name + ".svg", dpi=300, bbox_inches="tight", pad_inches=0.1)
+    def save_fig(self, save_jpg=True, save_svg=True, name="output_fig"):
+        """Save the figure as both JPG and SVG files.
+
+        Args:
+            name: Output file path without extension.
+        """
+        if name.endswith(".jpg") or name.endswith(".svg") or name.endswith(".png"):
+            self.fig.savefig(name, dpi=300, bbox_inches="tight", pad_inches=0.1)
+        else:
+            if save_jpg:
+                self.fig.savefig(
+                    name + ".jpg", dpi=300, bbox_inches="tight", pad_inches=0.1
+                )
+            if save_svg:
+                self.fig.savefig(
+                    name + ".svg", dpi=300, bbox_inches="tight", pad_inches=0.1
+                )
 
     def save(
         self, save_location=None, file_name=None, figure_description=None, data=None
     ):
+        """Save the figure and export plotted data to CSV.
+
+        Args:
+            save_location: Override directory path for saving.
+            file_name: Override file name for saving.
+            figure_description: Override description for CSV export.
+            data: If provided, save this data directly instead of plotted data.
+        """
         if save_location is not None:
             self.save_location = save_location
         if file_name is not None:
@@ -1620,30 +1896,38 @@ class FigureGenerator:
         if figure_description is not None:
             self.figure_description = None
         self.save_fig(self.save_location + "\\" + self.file_name)
-        if data is None:
-            self.export_data_to_csv(
-                self.save_location + "\\" + self.file_name, self.figure_description
-            )
-        else:
+        if self.data_storage is not None:
+            self.data_storage.save(self.save_location + "\\" + self.file_name)
+        if data is not None:
             self.save_csv(self.save_location + "\\" + self.file_name, data)
 
     def show(self):
+        """Display the figure in an interactive window."""
         plt.show()
 
     def close(self):
+        """Close the current figure and release its resources."""
         plt.close()
 
     def set_default_figure_settings(
         self, font_size=10, label_size=12, svg_font_setting="none"
     ):
-        """Set global font and text size to 10"""
+        """Configure global matplotlib font, label, math text, and SVG settings.
+
+        Sets font family to serif/Arial, configures label sizes, enables regular
+        math text rendering, and sets SVG font type.
+
+        Args:
+            font_size: Base font size for text elements.
+            label_size: Font size for axis labels.
+            svg_font_setting: SVG font type setting ('none' or 'path').
+        """
         default_font = {
             "family": "serif",
             "serif": "Arial",
             "weight": "normal",
             "size": font_size,
         }
-        """Set global label size"""
         default_label_size = {
             "labelsize": label_size,
         }
@@ -1651,18 +1935,19 @@ class FigureGenerator:
         matplotlib.rc("font", **default_font)
         matplotlib.rc("axes", **default_label_size)
 
-        """Set global math text to regular"""
         default_math_text = {"mathtext.default": "regular"}
         plt.rcParams.update(default_math_text)
         plt.rcParams.update({"svg.fonttype": svg_font_setting})
-        """Set global backend
-            The backend that is used to plot can greatly influence
-            how your figure looks, in general best resutls are obtained
-            with TkAgg backend
-        """
-        # plt.switch_backend('TkAgg')
 
     def remove_math_text(self, string):
+        """Strip matplotlib math-text delimiters from a string, preserving literal dollars.
+
+        Args:
+            string: Input string potentially containing '$' delimiters.
+
+        Returns:
+            Cleaned string with math-text delimiters removed.
+        """
         replaceUSD = False
         if "\$" in string:
             string = string.replace("\$", "USD")
@@ -1673,149 +1958,17 @@ class FigureGenerator:
             string = string.replace("USD", "$")
         return string
 
-    def export_data_to_csv(self, file_name="none", figure_description=None):
-
-        data = []
-        if figure_description is not None:
-            data.append([figure_description])
-        if self.map_mode:
-            zlabel = self.plotted_data.get("zlabel")
-            if zlabel is not None:
-                data.append(
-                    [
-                        "Map data for {}".format(
-                            self.remove_math_text(zlabel),
-                        ),
-                        "",
-                    ]
-                )
-                data.append(
-                    [
-                        "First column is {}".format(
-                            self.remove_math_text(self.plotted_data["ylabel"])
-                        ),
-                    ]
-                )
-                data.append(
-                    [
-                        "First row is {}".format(
-                            self.remove_math_text(self.plotted_data["xlabel"])
-                        ),
-                    ]
-                )
-                data.append(
-                    [
-                        "Internal data is {}".format(
-                            self.remove_math_text(self.plotted_data["zlabel"])
-                        ),
-                    ]
-                )
-                rows_label = [self.plotted_data["ylabel"], "|", "|", "v"]
-                # print(data)
-                data.append([""] + list(self.plotted_data["datax"]))
-                # print(
-                #     self.plotted_data["datax"].shape,
-                #     self.plotted_data["datay"].shape,
-                #     self.plotted_data["dataz"].shape,
-                # )
-                for ik, k in enumerate(self.plotted_data["datay"]):
-                    try:
-                        lb = rows_label[ik]
-                    except IndexError:
-                        lb = ""
-                    data.append([k] + list(self.plotted_data["dataz"][ik]))
-        elif self.box_mode:
-            pass
-            # # print("box_mode", self.plotted_data)
-            # # data.append(["key", "low_val", "high_val"])
-            # header_added = False
-            # for key, item in self.plotted_data.items():
-            #     # print(item)
-            #     if isinstance(item, dict):
-            #         if item["box_data"][0] != None:
-            #             if len(item["box_data"]) == 2 and header_added == False:
-            #                 data.append(["key", "low_val", "high_val"])
-            #                 header_added = True
-            #             elif header_added == False:
-            #                 data.append(["key", "LW", "25", "50", "75", "HW"])
-            #                 header_added = True
-            #             data.append([key] + list(item["box_data"]))
-            # # print(data)
-
-        else:
-            if "xlabel" in self.plotted_data:
-                header = [self.plotted_data["xlabel"]]
-            else:
-                header = [""]
-            x_data = []
-            y_data = []
-            x_err_data = []
-            y_err_data = []
-            z_data = []
-            x_flat = []
-            for key in self.plotted_data.keys():
-                if key != "xlabel" and key != "ylabel" and key != "zlabel":
-                    # print(self.plotted_data, key)
-                    if len(self.plotted_data[key]["datax"]) > 0:
-                        header.append(key)
-
-                        x_flat += list(self.plotted_data[key]["datax"])
-                        x_data.append(self.plotted_data[key]["datax"])
-                        y_data.append(self.plotted_data[key]["datay"])
-                        if self.plotted_data[key].get("dataz") is not None:
-                            z_data.append(self.plotted_data[key]["dataz"])
-                            header.append(self.plotted_data["zlabel"])
-                        if self.plotted_data[key].get("xerr") is not None:
-                            x_err_data.append(self.plotted_data[key]["xerr"])
-                            header.append("x error in" + key)
-                        if self.plotted_data[key].get("yerr") is not None:
-                            y_err_data.append(self.plotted_data[key]["yerr"])
-                            header.append("y error in" + key)
-            data.append(header)
-            # print(header)
-
-            x_uq = np.unique(np.array(x_flat).flatten())
-            for x in x_uq:
-                row = [x]
-                for i, k in enumerate(x_data):
-                    y_ix = np.where(k == x)[0]  # abs(k - x) < 1e-10
-                    # print(y_ix,k,x)
-                    if len(y_ix) == 1:
-                        # print(y_ix, k, x)
-                        try:
-                            row.append(float(y_data[i][y_ix]))
-                            if len(z_data) > 0:
-                                row.append(float(z_data[i][y_ix]))
-                            if len(x_err_data) > 0:
-                                row.append(float(x_err_data[i][y_ix]))
-                            if len(y_err_data) > 0:
-                                row.append(float(y_err_data[i][y_ix]))
-                        except TypeError:
-                            row.append("")
-                            if len(x_err_data) > 0:
-                                row.append("")
-                            if len(y_err_data) > 0:
-                                row.append("")
-                    else:
-                        row.append("")
-                        if len(x_err_data) > 0:
-                            row.append("")
-                        if len(y_err_data) > 0:
-                            row.append("")
-                data.append(row)
-        # print(self.plotted_data)
-
-        save_name = file_name + ".csv"
-        self.save_csv(save_name, data)
-
     def save_csv(self, file_name, data):
-        save_name = file_name + ".csv"
+        """Write data rows to a CSV file.
+
+        Args:
+            file_name: Output file path (.csv extension added if missing).
+            data: List of rows, where each row is a list of values.
+        """
+        if not file_name.endswith(".csv"):
+            file_name += ".csv"
+        save_name = file_name
         with open(save_name, "w", newline="") as csvfile:
             spamwriter = csv.writer(csvfile, delimiter=",")
-            # spamwriter.writerow(header)
             for k in data:
                 spamwriter.writerow(k)
-
-
-class figureGenerator(FigureGenerator):
-    _logger.warning("figureGenerator is deprecated, please use FigureGenerator")

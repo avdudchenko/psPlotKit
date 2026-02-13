@@ -415,7 +415,3 @@ class PsData:
             data_type="arithmetic_result",
             data_array=result_quantity,
         )
-
-
-class psData(PsData):
-    _logger.warning("psData is deprecated, please use PsData")

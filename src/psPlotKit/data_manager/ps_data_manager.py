@@ -1013,7 +1013,3 @@ class PsDataManager(dict):
                         evaluated_count, return_key
                     )
                 )
-
-
-class psDataManager(PsDataManager):
-    _logger.warning("psDataManager is deprecated, please use PsDataManager")
