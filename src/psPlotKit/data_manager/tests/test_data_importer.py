@@ -12,11 +12,6 @@ def get_data():
     return PsDataImport(os.path.join(_this_file_path, "multi_dir_test.h5"))
 
 
-@pytest.fixture
-def get_data_simple():
-    return PsDataImport(os.path.join(_this_file_path, "single_test.h5"))
-
-
 def test_data_importer(get_data):
     datamanager = get_data
     expected_dirs = [
