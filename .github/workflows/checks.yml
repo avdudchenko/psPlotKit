@@ -79,8 +79,11 @@ jobs:
         name: Install via psplotkit.yaml
         run: |
           git config --system core.longpaths true
-          conda env update --file psplotkit.yaml
+          conda env update --file psplotkit.yml
           pip list
+      - if: matrix.coverage
+        name: Enable coverage for pytest
+        run: echo PYTEST_ADDOPTS="$PYTEST_ADDOPTS --cov --cov-report=xml" >> $GITHUB_ENV
       - if: matrix.install-mode == 'standard'
         name: Install (standard)
         run: |
@@ -90,7 +93,8 @@ jobs:
         run: echo PYTEST_ADDOPTS="$PYTEST_ADDOPTS --cov --cov-report=xml" >> $GITHUB_ENV
       - name: Run pytest 
         run: |
-          pytest --pyargs psPlotKit      
+          pip install pytest  # ensure pytest is installed (should do nothing if already present from requirements-dev.txt)
+          pytest --pyargs psPlotKit     
       - name: Upload coverage report as job artifact
         if: matrix.coverage
         uses: actions/upload-artifact@v4
