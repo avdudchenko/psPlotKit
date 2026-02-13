@@ -42,9 +42,9 @@ class PsData:
         access data as follows
 
         PsData.data - return raw numpy array
-        PsData.udata - return np array with units
+        PsData.data_with_units - return np array with units (also available as .udata for backwards compatibility)
         PsData.data_feasible - returns only feasible data
-        PsData.udata_feasible - returns only feasible data with units
+        PsData.raw_data_with_units - returns raw data with units (also available as .uraw_data for backwards compatibility)
 
         to convert units
         PsData.convert_units('new_unit')
@@ -60,6 +60,10 @@ class PsData:
             self.data_label = data_key
         else:
             self.data_label = data_label
+        # Accept quantities objects directly — extract magnitude and units
+        if isinstance(data_array, qs.Quantity):
+            import_units = str(data_array.dimensionality)
+            data_array = data_array.magnitude
         self.sunits = self._convert_string_unit(import_units)
         self.data_is_numbers = True
         self._original_data = np.array(data_array).copy()
@@ -161,10 +165,28 @@ class PsData:
         if self.data_is_numbers:
             self.data = self.data * manual_conversion
         qsunits = self._get_qs_unit()
-        self.udata = qs.Quantity(self.data.copy(), qsunits)
-        self.uraw_data = qs.Quantity(self.raw_data.copy(), qsunits)
-        self.data = self.udata.magnitude
+        self.data_with_units = qs.Quantity(self.data.copy(), qsunits)
+        self.raw_data_with_units = qs.Quantity(self.raw_data.copy(), qsunits)
+        self.data = self.data_with_units.magnitude
         self.set_label()
+
+    @property
+    def udata(self):
+        """Backwards-compatible alias for data_with_units."""
+        return self.data_with_units
+
+    @udata.setter
+    def udata(self, value):
+        self.data_with_units = value
+
+    @property
+    def uraw_data(self):
+        """Backwards-compatible alias for raw_data_with_units."""
+        return self.raw_data_with_units
+
+    @uraw_data.setter
+    def uraw_data(self, value):
+        self.raw_data_with_units = value
 
     def set_label(self, label=None):
         if label != None:
@@ -240,18 +262,19 @@ class PsData:
         self.raw_data = data
 
     def to_units(self, new_units):
-
         self.sunits = self._convert_string_unit(new_units)
-
         qsunits = self._get_qs_unit()
-        if new_units == "degC" and str(self.udata.units) == "1.0 K":
-            self.udata = qs.Quantity(self.udata.magnitude[:] - 273.15, new_units)
+        if new_units == "degC" and str(self.data_with_units.units) == "1.0 K":
+            self.data_with_units = qs.Quantity(
+                self.data_with_units.magnitude[:] - 273.15, new_units
+            )
         else:
-            self.udata = self.udata.rescale(qsunits)
-        self.uraw_data = self.uraw_data.rescale(qsunits)
-        self.data = self.udata.magnitude[:]
-        self.raw_data = self.uraw_data.magnitude
+            self.data_with_units = self.data_with_units.rescale(qsunits)
+        self.raw_data_with_units = self.raw_data_with_units.rescale(qsunits)
+        self.data = self.data_with_units.magnitude[:]
+        self.raw_data = self.raw_data_with_units.magnitude
         self.set_label()
+        return self
 
     def assign_units(self, assigned_units, manual_conversion_factor=1):
         self.sunits = self._convert_string_unit(assigned_units)
@@ -261,7 +284,9 @@ class PsData:
         _logger.info("Data: {}, units {}".format(self.data, self.sunits))
 
     def display_raw_data(self):
-        _logger.info("Raw data: {}, units {}".format(self.uraw_data, self.sunits))
+        _logger.info(
+            "Raw data: {}, units {}".format(self.raw_data_with_units, self.sunits)
+        )
 
     def _iso_to_epoch(self, data):
         # data_time = map(data, datetime.time.fromisoformat)
@@ -280,6 +305,45 @@ class PsData:
             data_dict["units"] = self.sunits
             data_dict["values"] = self.data.tolist()
         return data_dict
+
+    # ---------- arithmetic operations ----------
+
+    def _arithmetic_op(self, other, op, symbol):
+        """Perform an arithmetic operation between two PsData objects.
+
+        Uses data_with_units so the quantities library handles unit
+        compatibility and propagation.  Returns a new PsData whose
+        data_key describes the operation performed.
+
+        Args:
+            other: another PsData instance.
+            op: callable that takes (self.data_with_units, other.data_with_units).
+            symbol: string like '+', '-', '*', '/' used in the result data_key.
+        """
+        if not isinstance(other, PsData):
+            raise TypeError(
+                "Arithmetic operations require two PsData objects, "
+                "got {}".format(type(other))
+            )
+        result_quantity = op(self.data_with_units, other.data_with_units)
+        result_key = "({} {} {})".format(self.data_key, symbol, other.data_key)
+        return PsData(
+            data_key=result_key,
+            data_type="arithmetic_result",
+            data_array=result_quantity,
+        )
+
+    def __add__(self, other):
+        return self._arithmetic_op(other, lambda a, b: a + b, "+")
+
+    def __sub__(self, other):
+        return self._arithmetic_op(other, lambda a, b: a - b, "-")
+
+    def __mul__(self, other):
+        return self._arithmetic_op(other, lambda a, b: a * b, "*")
+
+    def __truediv__(self, other):
+        return self._arithmetic_op(other, lambda a, b: a / b, "/")
 
 
 class psData(PsData):

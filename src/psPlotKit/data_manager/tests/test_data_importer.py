@@ -9,7 +9,12 @@ _this_file_path = os.path.dirname(os.path.abspath(__file__))
 
 @pytest.fixture
 def get_data():
-    return PsDataImport(os.path.join(_this_file_path, "test_file.h5"))
+    return PsDataImport(os.path.join(_this_file_path, "multi_dir_test.h5"))
+
+
+@pytest.fixture
+def get_data_simple():
+    return PsDataImport(os.path.join(_this_file_path, "single_test.h5"))
 
 
 def test_data_importer(get_data):

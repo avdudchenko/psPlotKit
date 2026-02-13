@@ -96,7 +96,6 @@ class PsDataImport:
         # assert False
         for d in self.directories:
             self.file_index[d] = {}
-            # print(d)
         # assert False
         self.get_unique_directories()
         # assert False
@@ -326,7 +325,7 @@ class PsDataImport:
         selected_directories = self.get_selected_directories(directories)
         _logger.info("got selected directories {} seconds!".format(time.time() - ts))
         _logger.info(
-            "Searing for {} keys: {}. unique keys".format(
+            "Searching for {} keys: {}. unique keys".format(
                 len(data_key_list), len(self.unique_data_keys)
             )
         )
@@ -531,7 +530,10 @@ class PsDataImport:
 
     def _get_raw_data_contents(self, d):
         if self.h5_mode:
-            data_file = self.data_file[d]
+            if d == "":
+                data_file = self.data_file
+            else:
+                data_file = self.data_file[d]
         elif self.json_mode:
             data_file = self.data_file
             if isinstance(self.raw_data_file, dict):

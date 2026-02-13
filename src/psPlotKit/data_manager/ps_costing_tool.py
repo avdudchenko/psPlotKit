@@ -342,7 +342,7 @@ class PsCosting:
             data = self.PsDataManager.get_data(udir, key)
             self.global_costs[
                 key.replace("{}.".format(self.default_costing_block), "")
-            ] = data.udata
+            ] = data.data_with_units
 
     def check_key_block_in_key(self, block, test_key, d_key):
         d_split = d_key.split(".")
@@ -389,7 +389,7 @@ class PsCosting:
                                 sdata = self.PsDataManager.get_data(udir, d_key)
                                 if sdata.sunits != "dimensionless":
                                     if "USD" not in sdata.sunits:
-                                        data = sdata.udata.rescale(qs.W)
+                                        data = sdata.data_with_units.rescale(qs.W)
                                         data = data * qs.year
                                         data = data.rescale(qs.kWh)
                                         data = (
@@ -406,11 +406,11 @@ class PsCosting:
                                         and cost_type == "OPEX"
                                     ):
                                         data = (
-                                            sdata.udata
+                                            sdata.data_with_units
                                             # * self.global_costs["utilization_factor"]
                                         )
                                     else:
-                                        data = sdata.udata
+                                        data = sdata.data_with_units
                                     if cost_type == "OPEX":
                                         # make sure current d_key is not a fixed_opertaing_cost
                                         fixed_check = all(
