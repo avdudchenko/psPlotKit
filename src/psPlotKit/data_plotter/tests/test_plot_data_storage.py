@@ -12,7 +12,7 @@ from psPlotKit.data_plotter.plot_data_storage import (
     BoxDataStorage,
 )
 
-__author__ = "Alexander V. Dudchenko (SLAC)"
+__author__ = "Alexander V. Dudchenko "
 
 test_dir = os.path.dirname(os.path.abspath(__file__))
 output_dir = os.path.join(test_dir, "test_output")

@@ -5,7 +5,7 @@ import numpy as np
 
 from psPlotKit.util import logger
 
-__author__ = "Alexander V. Dudchenko (SLAC)"
+__author__ = "Alexander V. Dudchenko "
 
 
 _logger = logger.define_logger(__name__, "MapPlotter", level="INFO")

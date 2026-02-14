@@ -3,7 +3,7 @@ from psPlotKit.util.util_funcs import create_save_location
 from psPlotKit.data_plotter.ps_line_plotter import linePlotter
 import numpy as np
 
-__author__ = "Alexander V. Dudchenko (SLAC)"
+__author__ = "Alexander V. Dudchenko "
 
 
 class boxPlotter:

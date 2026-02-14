@@ -20,7 +20,7 @@ Example::
 import numpy as np
 from psPlotKit.util.logger import define_logger
 
-__author__ = "Alexander V. Dudchenko (SLAC)"
+__author__ = "Alexander V. Dudchenko "
 
 _logger = define_logger(__name__, "PsExpression", level="INFO")
 

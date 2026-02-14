@@ -3,7 +3,7 @@ import numpy as np
 import quantities as qs
 from psPlotKit.data_manager.ps_data import PsData
 
-__author__ = "Alexander V. Dudchenko (SLAC)"
+__author__ = "Alexander V. Dudchenko "
 
 _logger = logger.define_logger(__name__, "PsCosting")
 

@@ -15,7 +15,7 @@ from psPlotKit.data_plotter.plot_data_storage import (
     BoxDataStorage,
 )
 
-__author__ = "Alexander V. Dudchenko (SLAC)"
+__author__ = "Alexander V. Dudchenko "
 
 test_dir = os.path.dirname(os.path.abspath(__file__))
 output_dir = os.path.join(test_dir, "test_fig_output")
@@ -26,13 +26,13 @@ def _read_csv(path):
         return list(csv.reader(f))
 
 
-# @pytest.fixture(autouse=True)
-# def _clean_output():
-#     os.makedirs(output_dir, exist_ok=True)
-#     yield
-#     for fname in os.listdir(output_dir):
-#         os.remove(os.path.join(output_dir, fname))
-#     os.rmdir(output_dir)
+@pytest.fixture(autouse=True)
+def _clean_output():
+    os.makedirs(output_dir, exist_ok=True)
+    yield
+    for fname in os.listdir(output_dir):
+        os.remove(os.path.join(output_dir, fname))
+    os.rmdir(output_dir)
 
 
 # ---------------------------------------------------------------------------

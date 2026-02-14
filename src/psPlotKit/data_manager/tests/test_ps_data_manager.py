@@ -5,7 +5,7 @@ from psPlotKit.data_manager.ps_data_manager import PsDataManager
 from psPlotKit.data_manager.ps_data import PsData
 from psPlotKit.data_manager.ps_expression import ExpressionNode, ExpressionKeys
 
-__author__ = "Alexander V. Dudchenko (SLAC)"
+__author__ = "Alexander V. Dudchenko "
 
 _this_file_path = os.path.dirname(os.path.abspath(__file__))
 _test_file = os.path.join(_this_file_path, "multi_dir_test.h5")

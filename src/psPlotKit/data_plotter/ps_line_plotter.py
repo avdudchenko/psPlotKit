@@ -1,7 +1,7 @@
 from psPlotKit.data_plotter.fig_generator import figureGenerator
 from psPlotKit.util.util_funcs import create_save_location
 
-__author__ = "Alexander V. Dudchenko (SLAC)"
+__author__ = "Alexander V. Dudchenko "
 
 
 class linePlotter:
