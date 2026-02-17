@@ -9,7 +9,7 @@ import difflib
 import time
 import json
 
-__author__ = "Alexander V. Dudchenko (SLAC)"
+__author__ = "Alexander V. Dudchenko "
 
 _logger = logger.define_logger(__name__, "PsDataImport", level="INFO")
 

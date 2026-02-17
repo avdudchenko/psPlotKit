@@ -2,7 +2,7 @@ import pytest
 import os
 from psPlotKit.data_manager.data_importer import PsDataImport
 
-__author__ = "Alexander V. Dudchenko (SLAC)"
+__author__ = "Alexander V. Dudchenko "
 
 _this_file_path = os.path.dirname(os.path.abspath(__file__))
 

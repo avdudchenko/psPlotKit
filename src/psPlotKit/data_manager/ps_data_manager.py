@@ -10,7 +10,7 @@ import warnings
 import difflib
 from psPlotKit.data_manager.ps_expression import ExpressionNode, ExpressionKeys
 
-__author__ = "Alexander V. Dudchenko (SLAC)"
+__author__ = "Alexander V. Dudchenko "
 
 _logger = define_logger(__name__, "PsDataManager", level="INFO")
 
