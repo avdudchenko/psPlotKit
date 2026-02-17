@@ -8,3 +8,4 @@ psPlotKit/examples/figs/Brine salinity vs LCOW.csv
 *.pyc
 *.egg
 *.egg-info
+site/

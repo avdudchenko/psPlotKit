@@ -1,0 +1,93 @@
+site_name: psPlotKit
+site_description: A Python plotting and analysis toolkit for parameter sweep and loop tool simulation data.
+site_url: https://avdudchenko.github.io/psPlotKit/
+repo_url: https://github.com/avdudchenko/psPlotKit
+repo_name: avdudchenko/psPlotKit
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            heading_level: 2
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+  - User Guide:
+      - Data Import: guide/data-import.md
+      - Data Management: guide/data-management.md
+      - Expressions: guide/expressions.md
+      - Costing: guide/costing.md
+      - Plotting: guide/plotting.md
+  - API Reference:
+      - Data Manager:
+          - PsDataImport: api/data_importer.md
+          - PsData: api/ps_data.md
+          - PsDataManager: api/ps_data_manager.md
+          - PsCosting: api/ps_costing.md
+          - Expressions: api/ps_expression.md
+      - Data Plotter:
+          - FigureGenerator: api/fig_generator.md
+          - linePlotter: api/line_plotter.md
+          - boxPlotter: api/box_plotter.md
+          - BreakDownPlotter: api/break_down_plotter.md
+          - MapPlotter: api/map_plotter.md
+          - Plot Data Storage: api/plot_data_storage.md
+      - Utilities:
+          - Logger: api/logger.md
+          - Utility Functions: api/util_funcs.md
+  - Examples:
+      - Cost Breakdown Plotting: examples/cost-plotting.md
+      - Simple Bar Plots: examples/bar-plots.md
