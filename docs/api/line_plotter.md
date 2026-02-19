@@ -1,3 +1,3 @@
-# linePlotter
+# LinePlotter
 
-::: psPlotKit.data_plotter.ps_line_plotter.linePlotter
+::: psPlotKit.data_plotter.ps_line_plotter.LinePlotter
