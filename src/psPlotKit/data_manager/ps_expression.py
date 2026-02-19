@@ -240,48 +240,75 @@ class ExpressionKeys:
         ek["Ca_2+"]                  # item access with original key
     """
 
-    def __init__(self, key_names, warn_on_sanitize=False):
+    def __init__(self, key_names=None, warn_on_sanitize=False):
         """
         Args:
             key_names: iterable of return_key values (strings or tuples).
+                If *None*, an empty container is created.
             warn_on_sanitize: if *True*, log an info message for every key
                 whose safe attribute name differs from its original
                 representation.  Defaults to *False*.
         """
-        self._keys = set(key_names)
-
-        # --- build safe-name mappings ---
-        # First pass: compute base safe name for every original key
-        base_names = {}
-        for key in self._keys:
-            base_names[key] = _sanitize_key_to_attr(key)
-
-        # Group by base name to detect collisions
-        groups = defaultdict(list)
-        for key, base in base_names.items():
-            groups[base].append(key)
-
+        self._warn_on_sanitize = warn_on_sanitize
+        self._keys = set()
         self._safe_to_original = {}  # safe_attr  → original key
         self._original_to_safe = {}  # original key → safe_attr
 
-        for base, keys_in_group in groups.items():
-            if len(keys_in_group) == 1:
-                key = keys_in_group[0]
-                self._safe_to_original[base] = key
-                self._original_to_safe[key] = base
-            else:
-                # Collision — disambiguate with numeric suffix
-                for i, key in enumerate(sorted(keys_in_group, key=lambda k: str(k)), 1):
-                    safe = "{}_{}".format(base, i)
-                    self._safe_to_original[safe] = key
-                    self._original_to_safe[key] = safe
+        if key_names is not None:
+            for key in key_names:
+                self.add_key(key)
 
-        # --- optionally warn about any keys whose safe name differs ---
-        if warn_on_sanitize:
-            for key in sorted(self._keys, key=str):
-                safe = self._original_to_safe[key]
-                if isinstance(key, str) and safe == key:
-                    continue
+    # ------------------------------------------------------------------
+    # dynamic key registration
+    # ------------------------------------------------------------------
+
+    def add_key(self, key):
+        """Register a new return_key, updating the safe-name mappings.
+
+        If the key is already registered this is a no-op.
+
+        Args:
+            key: a return_key value (string or tuple).
+        """
+        if key in self._keys:
+            return
+
+        self._keys.add(key)
+        base = _sanitize_key_to_attr(key)
+
+        # Check if the base name is already taken
+        if base in self._safe_to_original:
+            existing_key = self._safe_to_original[base]
+            # The existing key had no suffix — now we have a collision.
+            # Remove the old mapping and re-add both with numeric suffixes.
+            del self._safe_to_original[base]
+            del self._original_to_safe[existing_key]
+            colliders = sorted([existing_key, key], key=lambda k: str(k))
+            for i, k in enumerate(colliders, 1):
+                safe = "{}_{}".format(base, i)
+                self._safe_to_original[safe] = k
+                self._original_to_safe[k] = safe
+        elif any(
+            self._original_to_safe.get(k, "").startswith(base + "_")
+            for k in self._keys
+            if k != key
+        ):
+            # There are already disambiguated entries for this base.
+            # Find the next available numeric suffix.
+            idx = 1
+            while "{}_{}".format(base, idx) in self._safe_to_original:
+                idx += 1
+            safe = "{}_{}".format(base, idx)
+            self._safe_to_original[safe] = key
+            self._original_to_safe[key] = safe
+        else:
+            self._safe_to_original[base] = key
+            self._original_to_safe[key] = base
+
+        # --- optionally warn ---
+        if self._warn_on_sanitize:
+            safe = self._original_to_safe[key]
+            if not (isinstance(key, str) and safe == key):
                 _logger.info(
                     "Key {} is accessible as attribute '{}'".format(repr(key), safe)
                 )

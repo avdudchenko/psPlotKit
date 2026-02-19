@@ -503,6 +503,65 @@ class TestExpressionKeys:
         assert "is accessible as attribute" in caplog.text
         assert "Ca_2+" in caplog.text
 
+    # --- add_key (dynamic) ---
+
+    def test_add_key_grows_expression_keys(self):
+        """add_key on ExpressionKeys should make the new key accessible."""
+        ek = ExpressionKeys(["LCOW"])
+        ek.add_key("recovery")
+        assert len(ek) == 2
+        assert ek.recovery.key == "recovery"
+
+    def test_add_key_duplicate_is_noop(self):
+        """Adding the same key twice should not change the container."""
+        ek = ExpressionKeys(["LCOW"])
+        ek.add_key("LCOW")
+        assert len(ek) == 1
+
+    def test_add_key_collision_disambiguates(self):
+        """Adding a key that collides with an existing safe name should
+        trigger numeric suffix disambiguation for both."""
+        ek = ExpressionKeys(["Ca_2"])
+        assert ek._original_to_safe["Ca_2"] == "Ca_2"
+        ek.add_key("Ca_2+")
+        # Both should now have suffixed safe names
+        assert ek._original_to_safe["Ca_2"] != ek._original_to_safe["Ca_2+"]
+        assert ek["Ca_2"].key == "Ca_2"
+        assert ek["Ca_2+"].key == "Ca_2+"
+
+    # --- live reference through PsDataManager ---
+
+    def test_expression_keys_live_after_add_data(self):
+        """ExpressionKeys obtained before add_data should see keys added later."""
+        dm = PsDataManager()
+        dm.add_data("d", "LCOW", PsData("LCOW", "t", np.array([1.0])))
+        ek = dm.get_expression_keys()
+        assert ek.LCOW.key == "LCOW"
+
+        # Add new data after grabbing ek
+        dm.add_data("d", "recovery", PsData("recovery", "t", np.array([0.5])))
+        # ek should see the new key without re-calling get_expression_keys
+        assert ek.recovery.key == "recovery"
+        assert len(ek) == 2
+
+    def test_expression_keys_live_after_register_data_key(self):
+        """register_data_key after get_expression_keys should update the live ref."""
+        dm = PsDataManager()
+        dm.register_data_key("fs.LCOW", "LCOW")
+        ek = dm.get_expression_keys()
+        assert ek.LCOW.key == "LCOW"
+
+        dm.register_data_key("fs.recovery", "recovery")
+        assert ek.recovery.key == "recovery"
+
+    def test_get_expression_keys_returns_same_object(self):
+        """Multiple calls to get_expression_keys should return the same instance."""
+        dm = PsDataManager()
+        dm.register_data_key("fs.LCOW", "LCOW")
+        ek1 = dm.get_expression_keys()
+        ek2 = dm.get_expression_keys()
+        assert ek1 is ek2
+
 
 class TestExpressionNode:
     def test_add_builds_tree(self):
@@ -866,6 +925,51 @@ class TestEvaluateExpressions:
 
         result = dm.get_data("d", "res")
         np.testing.assert_array_almost_equal(result.data, [6.0])
+
+    # --- auto_evaluate_expressions ---
+
+    def test_auto_evaluate_on_register_with_data(self):
+        """register_expression should auto-evaluate when data is present."""
+        dm = PsDataManager()
+        dm.add_data("d", "a", PsData("a", "t", np.array([2.0, 3.0])))
+        dm.add_data("d", "b", PsData("b", "t", np.array([10.0, 20.0])))
+
+        ek = dm.get_expression_keys()
+        # auto_evaluate_expressions is True by default
+        dm.register_expression(ek.a + ek.b, return_key="sum_ab")
+
+        # Result should already be available without calling evaluate_expressions
+        result = dm.get_data("d", "sum_ab")
+        np.testing.assert_array_almost_equal(result.data, [12.0, 23.0])
+
+    def test_auto_evaluate_disabled(self):
+        """Setting auto_evaluate_expressions=False should skip auto-evaluation."""
+        dm = PsDataManager()
+        dm.auto_evaluate_expressions = False
+        dm.add_data("d", "a", PsData("a", "t", np.array([2.0])))
+        dm.add_data("d", "b", PsData("b", "t", np.array([3.0])))
+
+        ek = dm.get_expression_keys()
+        dm.register_expression(ek.a + ek.b, return_key="sum_ab")
+
+        # Result should NOT be available yet
+        with pytest.raises(KeyError):
+            dm.get_data("d", "sum_ab")
+
+        # Now call manually
+        dm.evaluate_expressions()
+        result = dm.get_data("d", "sum_ab")
+        np.testing.assert_array_almost_equal(result.data, [5.0])
+
+    def test_auto_evaluate_no_data_yet(self):
+        """register_expression before data is loaded should not fail."""
+        dm = PsDataManager()
+        ek = ExpressionKeys(["a", "b"])
+        dm._expression_keys = ek  # set up keys without data
+        # No data yet — register should not crash even with auto_evaluate on
+        dm.register_expression(ek.a + ek.b, return_key="sum_ab")
+        # And nothing should be evaluated
+        assert len(dm) == 0
 
 
 # ---------- add_data auto-wrapping ----------

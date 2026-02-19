@@ -31,6 +31,8 @@ class PsDataManager(dict):
         self.global_reduction_directory = None
         self._registered_key_import_status = {}
         self._registered_expressions = []
+        self._expression_keys = None
+        self.auto_evaluate_expressions = True
         if data_files is not None:
 
             self.PsDataImportInstances = []
@@ -151,18 +153,23 @@ class PsDataManager(dict):
             "file_key": file_key,
             "imported": False,
         }
+        if self._expression_keys is not None:
+            self._expression_keys.add_key(return_key)
 
     def get_expression_keys(self, warn_on_sanitize=False):
-        """Return an :class:`ExpressionKeys` object with all registered return_keys.
+        """Return the live :class:`ExpressionKeys` reference for this manager.
 
-        Attribute access on the returned object yields :class:`ExpressionNode`
-        leaves that can be combined with arithmetic operators to build
-        expression trees for :meth:`register_expression`.
+        The returned object is kept in sync with the manager — new keys
+        added via :meth:`add_data` or :meth:`register_data_key` are
+        automatically available without calling this method again.
 
         Args:
             warn_on_sanitize: if *True*, log an info message for every key
                 whose safe attribute name differs from its original
-                representation.  Defaults to *False*.
+                representation.  Defaults to *False*.  Only takes effect
+                the first time the :class:`ExpressionKeys` is created; to
+                change the setting later, update ``ek._warn_on_sanitize``
+                directly.
 
         Example::
 
@@ -170,10 +177,14 @@ class PsDataManager(dict):
             dm.register_expression(ek.LCOW / ek.recovery,
                                    return_key='cost_per_recovery')
         """
-        # Combine return_keys from register_data_key() and add_data()
-        print(self.data_keys)
-        all_keys = set(self.data_keys) | set(self._registered_key_import_status.keys())
-        return ExpressionKeys(all_keys, warn_on_sanitize=warn_on_sanitize)
+        if self._expression_keys is None:
+            all_keys = set(self.data_keys) | set(
+                self._registered_key_import_status.keys()
+            )
+            self._expression_keys = ExpressionKeys(
+                all_keys, warn_on_sanitize=warn_on_sanitize
+            )
+        return self._expression_keys
 
     def display(self):
         """func to show file data content in a clean manner"""
@@ -239,6 +250,8 @@ class PsDataManager(dict):
                 __key = tuple(__key)
         if __key not in self.data_keys:
             self.data_keys.append(__key)
+            if self._expression_keys is not None:
+                self._expression_keys.add_key(__key)
 
     def add_data(
         self,
@@ -952,6 +965,9 @@ class PsDataManager(dict):
                 "assign_units": assign_units,
             }
         )
+        # Auto-evaluate if data is already loaded
+        if self.auto_evaluate_expressions and len(self) > 0:
+            self.evaluate_expressions()
 
     def evaluate_expressions(self):
         """Evaluate all registered expressions across every unique directory.
