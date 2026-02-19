@@ -336,7 +336,8 @@ class PsDataImport:
                 if isinstance(dkl, dict):
                     key = dkl["filekey"]
                     return_key = dkl["return_key"]
-                    directories = dkl.get("directories", None)
+                    directories = dkl.get("search_directories", None)
+                    save_directory = dkl.get("directory", None)
                     # assert False
                     import_options = dkl
                 else:
@@ -377,18 +378,16 @@ class PsDataImport:
                             if len(_return_key) == 1:
                                 return_dir = idx[0]
                             else:
-                                if isinstance(return_dir, list):
-                                    return_dir = tuple(return_dir)
-                                elif isinstance(return_dir, str):
+                                if isinstance(return_dir, str):
                                     return_dir = None
-                                    # split_dir = return_dir.split("/")
-                                    # if len(split_dir) > 1:
-                                    #     return_dir = split_dir[-1]
 
-                                    # return_dir = None  # return_dir
-                            # print(return_dir)
-                            # print(return_dir)
-                            # assert False
+                            if save_directory is not None:
+                                if isinstance(return_dir, list):
+                                    return_dir.append(return_dir["directory"])
+                                elif return_dir is None:
+                                    return_dir = [save_directory]
+
+                                return_dir = tuple(return_dir)
                             data.set_label(_return_key)
 
                             if PsDataManager is not None:

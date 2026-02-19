@@ -379,6 +379,130 @@ class TestExpressionKeys:
         assert isinstance(ek.LCOW, ExpressionNode)
         assert isinstance(ek.recovery, ExpressionNode)
 
+    # --- tuple key support ---
+
+    def test_tuple_key_attr_access(self):
+        """Tuple key ('kay_a', 'a') should be accessible as ek.kay_a_a."""
+        ek = ExpressionKeys([("kay_a", "a")])
+        node = ek.kay_a_a
+        assert isinstance(node, ExpressionNode)
+        assert node.key == ("kay_a", "a")
+
+    def test_tuple_key_item_access(self):
+        """ek['kay_a', 'a'] should return a node with the original tuple key."""
+        ek = ExpressionKeys([("kay_a", "a"), "LCOW"])
+        node = ek["kay_a", "a"]
+        assert isinstance(node, ExpressionNode)
+        assert node.key == ("kay_a", "a")
+
+    def test_item_access_string_key(self):
+        """ek['LCOW'] should work for normal string keys."""
+        ek = ExpressionKeys(["LCOW"])
+        node = ek["LCOW"]
+        assert node.key == "LCOW"
+
+    def test_item_access_missing_key_raises(self):
+        """ek['missing'] should raise KeyError."""
+        ek = ExpressionKeys(["LCOW"])
+        with pytest.raises(KeyError, match="not a registered"):
+            _ = ek["missing"]
+
+    # --- unsafe character handling ---
+
+    def test_unsafe_chars_sanitised(self):
+        """Keys with special characters get safe attribute names."""
+        ek = ExpressionKeys(["LCOW (m**3)"])
+        node = ek.LCOW_m_3
+        assert isinstance(node, ExpressionNode)
+        assert node.key == "LCOW (m**3)"
+
+    def test_unsafe_chars_item_access(self):
+        """Original key with special characters accessible via ek[key]."""
+        ek = ExpressionKeys(["LCOW (m**3)"])
+        node = ek["LCOW (m**3)"]
+        assert node.key == "LCOW (m**3)"
+
+    def test_collision_disambiguation(self):
+        """'Ca_2+' and 'Ca_2' should get distinct safe names with suffixes."""
+        ek = ExpressionKeys(["Ca_2+", "Ca_2"])
+        # Both should have different safe names
+        safe_ca2 = ek._original_to_safe["Ca_2"]
+        safe_ca2_plus = ek._original_to_safe["Ca_2+"]
+        assert safe_ca2 != safe_ca2_plus
+        # Both should be accessible via attribute
+        assert getattr(ek, safe_ca2).key == "Ca_2"
+        assert getattr(ek, safe_ca2_plus).key == "Ca_2+"
+        # And via item access
+        assert ek["Ca_2"].key == "Ca_2"
+        assert ek["Ca_2+"].key == "Ca_2+"
+
+    def test_no_collision_no_suffix(self):
+        """Keys that sanitise to unique names should NOT get numeric suffixes."""
+        ek = ExpressionKeys(["Ca_2+", "LCOW"])
+        assert ek._original_to_safe["LCOW"] == "LCOW"
+        # Ca_2+ sanitises to Ca_2 which is unique in this set
+        assert ek._original_to_safe["Ca_2+"] == "Ca_2"
+
+    # --- iteration / len / dir ---
+
+    def test_iter_returns_original_keys(self):
+        """Iteration should yield original keys (including tuples)."""
+        keys = [("kay_a", "a"), "LCOW", "Ca_2+"]
+        ek = ExpressionKeys(keys)
+        assert set(ek) == set(keys)
+
+    def test_len(self):
+        ek = ExpressionKeys(["a", "b", ("c", "d")])
+        assert len(ek) == 3
+
+    def test_dir_contains_safe_names(self):
+        """dir(ek) should include the sanitised attribute names."""
+        ek = ExpressionKeys(["LCOW (m**3)", ("kay_a", "a")])
+        d = dir(ek)
+        assert "LCOW_m_3" in d
+        assert "kay_a_a" in d
+
+    # --- arithmetic with tuple keys ---
+
+    def test_arithmetic_with_tuple_key(self):
+        """Expression tree built from tuple keys should track them in required_keys."""
+        ek = ExpressionKeys([("kay_a", "a"), "LCOW"])
+        expr = ek.kay_a_a + ek.LCOW
+        assert ("kay_a", "a") in expr.required_keys
+        assert "LCOW" in expr.required_keys
+
+    # --- print_mapping / warn_on_sanitize ---
+
+    def test_print_mapping(self, caplog):
+        """print_mapping should log all key-to-attribute mappings."""
+        import logging
+
+        ek = ExpressionKeys(["LCOW", "Ca_2+", ("group", "a")])
+        with caplog.at_level(logging.INFO):
+            ek.print_mapping()
+        # Should mention all three keys in the log
+        assert "Ca_2+" in caplog.text
+        assert "LCOW" in caplog.text
+        assert "group" in caplog.text
+
+    def test_warn_on_sanitize_false_by_default(self, caplog):
+        """With default warn_on_sanitize=False, no sanitisation warnings are logged."""
+        import logging
+
+        with caplog.at_level(logging.INFO):
+            ExpressionKeys(["Ca_2+", ("group", "a")])
+        # Should NOT contain the "is accessible as attribute" message
+        assert "is accessible as attribute" not in caplog.text
+
+    def test_warn_on_sanitize_true_logs_warnings(self, caplog):
+        """With warn_on_sanitize=True, sanitised keys should trigger info messages."""
+        import logging
+
+        with caplog.at_level(logging.INFO):
+            ExpressionKeys(["Ca_2+", ("group", "a")], warn_on_sanitize=True)
+        assert "is accessible as attribute" in caplog.text
+        assert "Ca_2+" in caplog.text
+
 
 class TestExpressionNode:
     def test_add_builds_tree(self):
@@ -681,3 +805,122 @@ class TestEvaluateExpressions:
         diff_keys = [k for k in data_manager.keys() if "expr_diff" in str(k)]
         assert len(sum_keys) > 0
         assert len(diff_keys) > 0
+
+    def test_expression_with_special_char_keys(self):
+        """Expressions using keys with unsafe characters should evaluate
+        correctly using the original key names, not sanitised attribute names."""
+        dm = PsDataManager()
+        ps1 = PsData("Ca_2+", "test", np.array([1.0, 2.0, 3.0]))
+        ps2 = PsData("LCOW (m**3)", "test", np.array([10.0, 20.0, 30.0]))
+        dm.add_data("dir_a", "Ca_2+", ps1)
+        dm.add_data("dir_a", "LCOW (m**3)", ps2)
+        dm.register_data_key("Ca_2+", "Ca_2+")
+        dm.register_data_key("LCOW (m**3)", "LCOW (m**3)")
+
+        ek = dm.get_expression_keys()
+        # Verify nodes carry original keys, not sanitised names
+        assert ek.Ca_2.key == "Ca_2+"
+        assert ek.LCOW_m_3.key == "LCOW (m**3)"
+
+        dm.register_expression(ek.Ca_2 * ek.LCOW_m_3, return_key="product")
+        dm.evaluate_expressions()
+
+        result = dm.get_data("dir_a", "product")
+        np.testing.assert_array_almost_equal(result.data, [10.0, 40.0, 90.0])
+
+    def test_expression_with_tuple_keys(self):
+        """Expressions using tuple return_keys should evaluate correctly
+        by looking up the original tuple key in PsDataManager."""
+        dm = PsDataManager()
+        ps1 = PsData("a", "test", np.array([2.0, 4.0]))
+        ps2 = PsData("b", "test", np.array([3.0, 5.0]))
+        dm.add_data("dir_b", ("group", "a"), ps1)
+        dm.add_data("dir_b", ("group", "b"), ps2)
+        dm.register_data_key(("group", "a"), ("group", "a"))
+        dm.register_data_key(("group", "b"), ("group", "b"))
+
+        ek = dm.get_expression_keys()
+        # Attr access should resolve to original tuple key
+        assert ek.group_a.key == ("group", "a")
+        assert ek.group_b.key == ("group", "b")
+        # Item access should also work
+        assert ek["group", "a"].key == ("group", "a")
+
+        dm.register_expression(ek.group_a + ek.group_b, return_key="sum_ab")
+        dm.evaluate_expressions()
+
+        result = dm.get_data("dir_b", "sum_ab")
+        np.testing.assert_array_almost_equal(result.data, [5.0, 9.0])
+
+    def test_expression_item_access_evaluates(self):
+        """Expressions built via ek[key] item access should evaluate correctly."""
+        dm = PsDataManager()
+        dm.add_data("d", "Ca_2+", PsData("Ca_2+", "t", np.array([2.0])))
+        dm.add_data("d", "simple", PsData("simple", "t", np.array([3.0])))
+        dm.register_data_key("Ca_2+", "Ca_2+")
+        dm.register_data_key("simple", "simple")
+
+        ek = dm.get_expression_keys()
+        dm.register_expression(ek["Ca_2+"] * ek["simple"], return_key="res")
+        dm.evaluate_expressions()
+
+        result = dm.get_data("d", "res")
+        np.testing.assert_array_almost_equal(result.data, [6.0])
+
+
+# ---------- add_data auto-wrapping ----------
+
+
+class TestAddDataAutoWrap:
+    """Tests for add_data when a non-PsData value is provided."""
+
+    def test_add_raw_list(self, data_manager):
+        """Passing a plain list should auto-wrap it into a PsData."""
+        data_manager.add_data("test_dir", "my_key", [1.0, 2.0, 3.0])
+        result = data_manager.get_data("test_dir", "my_key")
+        assert isinstance(result, PsData)
+        np.testing.assert_array_equal(result.data, [1.0, 2.0, 3.0])
+        assert str(result.data_with_units.dimensionality) == "dimensionless"
+        assert result.data_type == "created"
+
+    def test_add_numpy_array(self, data_manager):
+        """Passing a numpy array should auto-wrap it into a PsData."""
+        data_manager.add_data("test_dir", "arr", np.array([10, 20, 30]))
+        result = data_manager.get_data("test_dir", "arr")
+        assert isinstance(result, PsData)
+        np.testing.assert_array_equal(result.data, [10, 20, 30])
+
+    def test_add_with_units(self, data_manager):
+        """The units kwarg should set import_units on the auto-created PsData."""
+        data_manager.add_data("test_dir", "pressure", [100, 200], units="kPa")
+        result = data_manager.get_data("test_dir", "pressure")
+        assert isinstance(result, PsData)
+        assert "kPa" in str(result.data_with_units.dimensionality)
+
+    def test_add_with_assign_units(self, data_manager):
+        """The assign_units kwarg should assign units without conversion."""
+        data_manager.add_data("test_dir", "cost", [5.5, 6.6], assign_units="USD/m**3")
+        result = data_manager.get_data("test_dir", "cost")
+        assert isinstance(result, PsData)
+        assert "USD/m**3" in str(result.data_with_units.dimensionality)
+
+    def test_add_with_data_type(self, data_manager):
+        """The data_type kwarg should override the default 'created' type."""
+        data_manager.add_data("test_dir", "custom", [1, 2], data_type="sweep_params")
+        result = data_manager.get_data("test_dir", "custom")
+        assert result.data_type == "sweep_params"
+
+    def test_add_psdata_passthrough(self, data_manager):
+        """Passing a PsData object directly should still work unchanged."""
+        ps = PsData("x", "output", np.array([9, 8, 7]))
+        data_manager.add_data("test_dir", "existing_ps", ps)
+        result = data_manager.get_data("test_dir", "existing_ps")
+        assert result is ps
+        np.testing.assert_array_equal(result.data, [9, 8, 7])
+
+    def test_add_scalar(self, data_manager):
+        """Passing a scalar value should auto-wrap it into a PsData."""
+        data_manager.add_data("test_dir", "single", 42.0)
+        result = data_manager.get_data("test_dir", "single")
+        assert isinstance(result, PsData)
+        assert float(result.data) == 42.0

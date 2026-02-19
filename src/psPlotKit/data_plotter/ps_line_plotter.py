@@ -1,10 +1,10 @@
-from psPlotKit.data_plotter.fig_generator import figureGenerator
+from psPlotKit.data_plotter.fig_generator import FigureGenerator
 from psPlotKit.util.util_funcs import create_save_location
 
 __author__ = "Alexander V. Dudchenko "
 
 
-class linePlotter:
+class LinePlotter:
     def __init__(
         self, PsData, save_location="", save_folder=None, save_name=None, show_fig=True
     ):
@@ -304,7 +304,7 @@ class linePlotter:
         if "fig_object" in fig_options:
             self.fig = fig_options.get("fig_object")
         else:
-            self.fig = figureGenerator()
+            self.fig = FigureGenerator()
 
             self.fig.init_figure(**fig_options)
         plotted_legend = []

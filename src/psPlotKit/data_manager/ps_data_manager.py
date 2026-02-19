@@ -110,7 +110,8 @@ class PsDataManager(dict):
         units=None,
         assign_units=None,
         conversion_factor=None,
-        directories=None,
+        directory=None,
+        search_directories=None,
     ):
         """register a key to be imported on next load_data call
         file_key: key in h5 file
@@ -119,23 +120,28 @@ class PsDataManager(dict):
         assign_units (optional): units to assign to data on import
         conversion_factor: (optional) - this will apply manual conversion factor to raw data before assigning units
                         only works when user passes in 'assign_units' option.
-        directories: (optional) - list of directories to limit search to
+        directory: (optional) - custom directory to create for storing data, this will be added to existing data directory
+                        e.g. if directory is dir_1 in file, and directory specified as cdir_1 the data will be stored
+                        in (dir_1, cdir_1, return_key) instead of (dir_1, return_key)
+        search_directories: (optional) - list of directories to limit search to
         """
         if self.registered_key_list is None:
             self.registered_key_list = []
         key_dict = {}
         key_dict["filekey"] = file_key
         key_dict["return_key"] = return_key
+        if directory is not None:
+            key_dict["directory"] = directory
         if units is not None:
             key_dict["units"] = units
         if assign_units is not None:
             key_dict["assign_units"] = assign_units
         if conversion_factor is not None:
             key_dict["conversion_factor"] = conversion_factor
-        if directories is not None:
-            if isinstance(directories, str):
-                directories = [directories]
-            key_dict["directories"] = directories
+        if search_directories is not None:
+            if isinstance(search_directories, str):
+                search_directories = [search_directories]
+            key_dict["search_directories"] = search_directories
         if assign_units is None and conversion_factor is not None:
             raise ValueError(
                 "conversion_factor only works when assign_units is specified"
@@ -146,12 +152,17 @@ class PsDataManager(dict):
             "imported": False,
         }
 
-    def get_expression_keys(self):
+    def get_expression_keys(self, warn_on_sanitize=False):
         """Return an :class:`ExpressionKeys` object with all registered return_keys.
 
         Attribute access on the returned object yields :class:`ExpressionNode`
         leaves that can be combined with arithmetic operators to build
         expression trees for :meth:`register_expression`.
+
+        Args:
+            warn_on_sanitize: if *True*, log an info message for every key
+                whose safe attribute name differs from its original
+                representation.  Defaults to *False*.
 
         Example::
 
@@ -159,7 +170,10 @@ class PsDataManager(dict):
             dm.register_expression(ek.LCOW / ek.recovery,
                                    return_key='cost_per_recovery')
         """
-        return ExpressionKeys(self._registered_key_import_status.keys())
+        # Combine return_keys from register_data_key() and add_data()
+        print(self.data_keys)
+        all_keys = set(self.data_keys) | set(self._registered_key_import_status.keys())
+        return ExpressionKeys(all_keys, warn_on_sanitize=warn_on_sanitize)
 
     def display(self):
         """func to show file data content in a clean manner"""
@@ -216,21 +230,36 @@ class PsDataManager(dict):
             return udir
 
     def add_key(self, __dir_key, __key):
-        if str(__dir_key) not in str(self.directory_keys):
+        if __dir_key not in self.directory_keys:
             self.directory_keys.append(__dir_key)
-        if str(__key) not in str(self.data_keys):
-            if isinstance(__key, list):
-                if len(__key) == 1:
-                    __key = __key[0]
-                else:
-                    __key = tuple(__key)
+        if isinstance(__key, list):
+            if len(__key) == 1:
+                __key = __key[0]
+            else:
+                __key = tuple(__key)
+        if __key not in self.data_keys:
             self.data_keys.append(__key)
 
-    def add_data(self, __dir_key, __key, __value) -> None:
+    def add_data(
+        self,
+        __dir_key,
+        __key,
+        __value,
+        units=None,
+        assign_units=None,
+        data_type=None,
+    ) -> None:
         __dir_key, __key, __data_dir = self._process_dir_data_keys(__dir_key, __key)
+
         self.add_key(__dir_key, __key)
-        if isinstance(__value, PsData) == False:
-            raise TypeError("Expected PsData instance")
+        if not isinstance(__value, PsData):
+            __value = PsData(
+                data_key=__key if isinstance(__key, str) else str(__key),
+                data_type=data_type if data_type is not None else "created",
+                data_array=np.array(__value),
+                import_units=units if units is not None else "dimensionless",
+                assign_units=assign_units,
+            )
         __value.__key = __key
         __value.__dir_key = __dir_key
         self._mark_key_imported(__key)
@@ -242,7 +271,8 @@ class PsDataManager(dict):
         if isinstance(__key, str):
             key_strings = [__key]
         elif isinstance(__key, (tuple, list)):
-            key_strings = [k for k in __key if isinstance(k, str)]
+            key_strings = [tuple(__key)]
+            key_strings = key_strings + [k for k in __key if isinstance(k, str)]
         else:
             return
         for ks in key_strings:
@@ -416,7 +446,6 @@ class PsDataManager(dict):
                 data = self[skey].data
                 norm_data = (data - base_value) / base_value
                 base_skey = list(skey)
-                print(base_skey, key)
                 base_skey.remove(key)
                 norm_base_skey = base_skey[:]
                 norm_base_skey.append(self.normalized_data)
