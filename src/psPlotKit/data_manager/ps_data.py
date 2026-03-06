@@ -34,6 +34,7 @@ class PsData:
         conversion_factor=1,
         data_label=None,
         custom_units=None,
+        data_directory=None,
         **kwargs,
     ):
         """
@@ -55,7 +56,7 @@ class PsData:
         self.data_key = data_key
         self.data_type = data_type
         self._convert_iso_to_epoch = False
-
+        self.data_directory = data_directory
         if data_label == None:
             self.data_label = data_key
         else:

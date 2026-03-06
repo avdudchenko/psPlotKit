@@ -143,3 +143,35 @@ dm.eval_function(
     units="dimensionless",
 )
 ```
+
+## Exporting Data to CSV
+
+You can export all loaded data to CSV files directly from the manager:
+
+```python
+dm.export_data_to_csv("results")
+```
+
+The export behaviour depends on how many directories the manager contains:
+
+- **Single directory** — writes one CSV file. If the path doesn't end in `.csv`, the extension is appended automatically (e.g. `"results"` → `results.csv`).
+- **Multiple directories** — creates a folder and writes one CSV per directory. If the path ends in `.csv`, the extension is stripped to form the folder name (e.g. `"results.csv"` → `results/`).
+
+Column headers are built from each data key's label and units (e.g. `LCOW (USD/m**3)`).
+
+```python
+# single directory — creates results.csv
+dm.export_data_to_csv("results")
+
+# multiple directories — creates output/ folder with one CSV per directory
+dm.export_data_to_csv("output")
+```
+
+You can also use the `PsDataExporter` class directly for more control:
+
+```python
+from psPlotKit.data_manager.ps_data_exporter import PsDataExporter
+
+exporter = PsDataExporter(dm, "my_results.csv")
+written_files = exporter.export()
+```

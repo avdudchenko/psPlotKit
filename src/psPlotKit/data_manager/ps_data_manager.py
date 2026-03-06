@@ -272,7 +272,10 @@ class PsDataManager(dict):
                 data_array=np.array(__value),
                 import_units=units if units is not None else "dimensionless",
                 assign_units=assign_units,
+                data_directory=__dir_key,
             )
+        else:
+            __value.data_directory = __dir_key
         __value.__key = __key
         __value.__dir_key = __dir_key
         self._mark_key_imported(__key)
@@ -438,6 +441,30 @@ class PsDataManager(dict):
         if len(data_keys) == 0:
             data_keys = self.data_keys[:]
         return data_keys
+
+    def export_data_to_csv(self, save_location):
+        """Export all loaded data to CSV file(s).
+
+        Convenience wrapper around :class:`PsDataExporter`.  If this
+        manager contains a single directory the data is written to a
+        single CSV at *save_location*.  If multiple directories exist a
+        folder is created at *save_location* with one CSV per directory.
+
+        Parameters
+        ----------
+        save_location : str
+            File path for single-directory export (e.g. ``"results.csv"``)
+            or folder path for multi-directory export.
+
+        Returns
+        -------
+        list[str]
+            Paths of the CSV files that were written.
+        """
+        from psPlotKit.data_manager.ps_data_exporter import PsDataExporter
+
+        exporter = PsDataExporter(self, save_location)
+        return exporter.export()
 
     def display_loaded_contents(self):
         for instance in self.PsDataImportInstances:

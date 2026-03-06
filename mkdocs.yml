@@ -77,6 +77,7 @@ nav:
           - PsData: api/ps_data.md
           - PsDataManager: api/ps_data_manager.md
           - PsCosting: api/ps_costing.md
+          - PsDataExporter: api/ps_data_exporter.md
           - Expressions: api/ps_expression.md
       - Data Plotter:
           - FigureGenerator: api/fig_generator.md
