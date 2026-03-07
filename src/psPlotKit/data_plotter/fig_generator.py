@@ -63,8 +63,9 @@ class FigureGenerator:
             file_name: Default file name for saved figures.
             figure_description: Description included in exported CSV files.
             svg_font_setting: SVG font type setting ('none' or 'path').
-            save_data: If True, automatically create a data storage object
-                on first plot call and export plotted data to CSV on save.
+            save_data: If True, export plotted data to CSV when :meth:`save`
+                is called.  Data is always logged internally regardless of
+                this setting so it can be used for axis computations.
         """
         self.colorMaps = {
             "qualitative_a": [
@@ -119,18 +120,20 @@ class FigureGenerator:
         self.twinx, self.twiny = False, False
 
     def _init_data_storage(self, storage_class):
-        """Lazily initialise ``data_storage`` on first plot call.
+        """Initialise ``data_storage`` on first plot call.
 
-        If *save_data* is ``True`` and no storage object exists yet, create
-        one of *storage_class*.  If a storage of a different type already
-        exists, log a warning and leave it unchanged so that the first
-        plot type wins.
+        Storage is **always** created so that plotted data is available
+        for internal computations (e.g. map axis generation).  Whether
+        the data is written to disk on :meth:`save` is controlled
+        separately by the *save_data* flag.
+
+        If a storage of a different type already exists, a warning is
+        logged and the existing instance is left unchanged so that the
+        first plot type wins.
 
         Args:
             storage_class: One of the ``PlotDataStorage`` subclasses.
         """
-        if not self.save_data:
-            return
         if self.data_storage is None:
             self.data_storage = storage_class()
         elif not isinstance(self.data_storage, storage_class):
@@ -1284,6 +1287,7 @@ class FigureGenerator:
             self.data_storage, MapDataStorage
         ):
             self.data_storage.register_data(datax, datay, map_data)
+        print(self.data_storage)
 
     def gen_map_function(self, axisdata, scale="linear"):
         """Generate a mapping function from data values to pixel indices.
@@ -1879,15 +1883,24 @@ class FigureGenerator:
                 )
 
     def save(
-        self, save_location=None, file_name=None, figure_description=None, data=None
+        self,
+        save_location=None,
+        file_name=None,
+        figure_description=None,
+        data=None,
+        save_data=None,
     ):
-        """Save the figure and export plotted data to CSV.
+        """Save the figure and optionally export plotted data to CSV.
 
         Args:
             save_location: Override directory path for saving.
             file_name: Override file name for saving.
             figure_description: Override description for CSV export.
             data: If provided, save this data directly instead of plotted data.
+            save_data: Local override for exporting plotted data to CSV.
+                If *True*, data is exported regardless of the instance
+                setting.  If *False*, data export is skipped.  If *None*
+                (default), falls back to ``self.save_data``.
         """
         if save_location is not None:
             self.save_location = save_location
@@ -1896,7 +1909,8 @@ class FigureGenerator:
         if figure_description is not None:
             self.figure_description = None
         self.save_fig(self.save_location + "\\" + self.file_name)
-        if self.data_storage is not None:
+        should_save = save_data if save_data is not None else self.save_data
+        if should_save and self.data_storage is not None:
             self.data_storage.save(self.save_location + "\\" + self.file_name)
         if data is not None:
             self.save_csv(self.save_location + "\\" + self.file_name, data)

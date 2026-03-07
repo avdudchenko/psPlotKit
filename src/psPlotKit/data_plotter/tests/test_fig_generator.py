@@ -82,12 +82,13 @@ class TestLinePlotStorage:
         assert float(rows[2][1]) == 4.0
         fig.close()
 
-    def test_line_no_storage_when_save_data_false(self):
-        """FigureGenerator with save_data=False should not create storage."""
+    def test_line_storage_always_created(self):
+        """FigureGenerator with save_data=False should still create storage for internal use."""
         fig = FigureGenerator()
         fig.init_figure()
         fig.plot_line([1, 2], [3, 4], label="test")
-        assert fig.data_storage is None
+        assert fig.data_storage is not None
+        assert isinstance(fig.data_storage, LineDataStorage)
         fig.close()
 
     def test_external_storage_still_works(self):
@@ -361,8 +362,8 @@ class TestLabelPropagation:
 
 
 class TestNoStorageBackwardsCompat:
-    def test_all_plots_work_without_storage(self):
-        """All plot methods should work when save_data=False (default)."""
+    def test_all_plots_create_storage_without_save(self):
+        """All plot methods should create storage even when save_data=False (default)."""
         fig = FigureGenerator()
         fig.init_figure()
 
@@ -371,12 +372,13 @@ class TestNoStorageBackwardsCompat:
         fig.plot_errorbar(xdata=[1, 2], ydata=[3, 4], yerr=[0.1, 0.2], label="E1")
         fig.plot_bar(0, 10, bottom=-5, label="B1")
 
-        assert fig.data_storage is None
+        assert fig.data_storage is not None
         fig.close()
 
-    def test_box_plot_works_without_storage(self):
+    def test_box_plot_creates_storage_without_save(self):
         fig = FigureGenerator()
         fig.init_figure()
         fig.plot_box(0, [1, 2, 3, 4, 5], save_label="Box1")
-        assert fig.data_storage is None
+        assert fig.data_storage is not None
+        assert isinstance(fig.data_storage, BoxDataStorage)
         fig.close()
