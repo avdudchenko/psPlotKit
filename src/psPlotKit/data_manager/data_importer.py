@@ -129,60 +129,59 @@ class PsDataImport:
             key_arr.append(keys)
             key_len.append(len(keys))
         unique_dir = []
+
         if len(self.directories) == 1:
             unique_dir = self.directories
             self.global_unique_directories = self.directories
             self.file_index[d]["unique_directory"] = self.directories[0]
+
         else:
+
             for idx, d in enumerate(self.directories):
                 num_unique_keys = key_len[idx]
                 unique_dir = []
                 if num_unique_keys == 1:
-                    idx = np.where(np.array(key_len) == 1)[0]
-                    for i in idx:
+                    _idx = np.where(np.array(key_len) == 1)[0]
+                    for i in _idx:
                         unique_dir = unique_dir + list(key_arr[i])
                 else:
-                    idx = np.where(np.array(key_len) == num_unique_keys)[0]
+                    _idx = np.where(np.array(key_len) == num_unique_keys)[0]
                     ka = []
-                    for i in idx:
+                    for i in _idx:
                         ka.append(key_arr[i])
                     ka = np.array(ka, dtype=str)
                     for row in ka.T:
                         uq_dirs = np.unique(row).tolist()
                         if len(uq_dirs) > 1:
                             unique_dir = unique_dir + list(uq_dirs)
-                used_dir_keys = []
-                for k in unique_dir:
-                    if k in d.split("/"):
-                        kf = str_to_num(k)
-                        split = d.split("/")
-                        if "" in split:
-                            split.remove("")
-                        idx = np.where(str(kf) == np.array(split))[0]
-                        if len(idx) == 1:
-                            try:
-                                prior_idx = idx[0] - 1
-                                if prior_idx >= 0 and split[idx[0] - 1] not in str(
-                                    used_dir_keys
-                                ):
+                array_being_processed = d.split("/")
+                if "" in array_being_processed:
+                    array_being_processed.remove("")
+                print(unique_dir)
+                current_dir = []
+                for _id, key in enumerate(array_being_processed):
+                    if str(key) in unique_dir:
+                        kf = str_to_num(key)
+                        prior_idx = _id - 1
+                        ldir = []
+                        if prior_idx >= 0 and array_being_processed[
+                            prior_idx
+                        ] not in str(current_dir):
+                            ldir.append(tuple([array_being_processed[prior_idx], kf]))
+                        else:
+                            ldir.append(kf)
 
-                                    ldir = tuple([split[idx[0] - 1], kf])
-                                else:
-                                    ldir = kf
-                            except IndexError:
-                                pass
-                        else:
-                            ldir = kf
-                        used_dir_keys.append(ldir)
-                        if ldir not in self.directory_indexes:
-                            self.directory_indexes[ldir] = []
-                        self.directory_indexes[ldir].append(d)
-                        if "unique_directory" not in self.file_index[d]:
-                            self.file_index[d]["unique_directory"] = [ldir]
-                        else:
-                            self.file_index[d]["unique_directory"].append(ldir)
-                        if kf not in self.global_unique_directories:
-                            self.global_unique_directories.append(ldir)
+                        for ld in ldir:
+                            current_dir.append(ld)
+                            if ld not in self.directory_indexes:
+                                self.directory_indexes[ld] = []
+                            self.directory_indexes[ld].append(d)
+                            if "unique_directory" not in self.file_index[d]:
+                                self.file_index[d]["unique_directory"] = [ld]
+                            else:
+                                self.file_index[d]["unique_directory"].append(ld)
+                            if kf not in self.global_unique_directories:
+                                self.global_unique_directories.append(ld)
         _logger.info(
             "global unique directory keys: {}".format(self.global_unique_directories)
         )
