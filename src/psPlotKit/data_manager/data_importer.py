@@ -157,16 +157,22 @@ class PsDataImport:
                 array_being_processed = d.split("/")
                 if "" in array_being_processed:
                     array_being_processed.remove("")
+                print(unique_dir)
+                current_dir = []
                 for _id, key in enumerate(array_being_processed):
                     if str(key) in unique_dir:
                         kf = str_to_num(key)
                         prior_idx = _id - 1
                         ldir = []
-                        if prior_idx >= 0:
+                        if prior_idx >= 0 and array_being_processed[
+                            prior_idx
+                        ] not in str(current_dir):
                             ldir.append(tuple([array_being_processed[prior_idx], kf]))
                         else:
                             ldir.append(kf)
+
                         for ld in ldir:
+                            current_dir.append(ld)
                             if ld not in self.directory_indexes:
                                 self.directory_indexes[ld] = []
                             self.directory_indexes[ld].append(d)
