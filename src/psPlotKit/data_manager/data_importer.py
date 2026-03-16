@@ -373,7 +373,11 @@ class PsDataImport:
                                 return_dir.remove("_auto_temp")
                             if self.default_return_directory is not None:
                                 idx = [self.default_return_directory]
-                                return_dir = idx + return_dir
+                                print(idx, return_dir)
+                                if isinstance(return_dir, list):
+                                    return_dir = idx + return_dir
+                                else:
+                                    return_dir = idx
                             if len(_return_key) == 1:
                                 return_dir = idx[0]
                             else:

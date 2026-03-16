@@ -1,4 +1,4 @@
-from psPlotKit.data_plotter.fig_generator import figureGenerator
+from psPlotKit.data_plotter.fig_generator import FigureGenerator
 from psPlotKit.data_manager import data_importer
 from psPlotKit.util.util_funcs import create_save_location
 import os
@@ -264,7 +264,7 @@ class BreakDownPlotter:
         if "fig_object" in self.fig_options:
             self.fig = self.fig_options.get("fig_object")
         else:
-            self.fig = figureGenerator()
+            self.fig = FigureGenerator()
             self.fig.init_figure(**self.fig_options)
         plotted_legend = []
         for group, items in self.hatch_groups.items():

@@ -19,6 +19,7 @@ from scipy.interpolate import (
 )
 
 from psPlotKit.util.logger import define_logger
+from psPlotKit.data_manager.ps_data import PsData
 from psPlotKit.data_plotter.plot_data_storage import (
     LineDataStorage,
     ErrorBarDataStorage,
@@ -32,6 +33,194 @@ import copy
 from matplotlib import cm
 
 _logger = define_logger(__name__, "FigureGenerator", level="INFO")
+
+
+class PlotOptions:
+    def __init__(
+        self,
+        label,
+        option_index=0,
+        color=None,
+        marker="o",
+        markersize=4,
+        ls="-",
+        lw=1.5,
+        markerfacecolor="white",
+        edgecolor=None,
+        vmin=None,
+        vmax=None,
+        zorder=4,
+        hatch=None,
+        save_label=None,
+        log_data=True,
+    ):
+        self.label = label
+        self.option_index = option_index
+        self.color = color
+        self.marker = marker
+        self.markersize = markersize
+        self.ls = ls
+        self.lw = lw
+        self.markerfacecolor = markerfacecolor
+        self.edgecolor = edgecolor
+        self.vmin = vmin
+        self.vmax = vmax
+        self.zorder = zorder
+        self.hatch = hatch
+        self.save_label = save_label
+        self.log_data = log_data
+
+    _default_colors = [
+        "#a6cee3",
+        "#1f78b4",
+        "#b2df8a",
+        "#33a02c",
+        "#fb9a99",
+        "#e31a1c",
+        "#fdbf6f",
+        "#ff7f00",
+        "#cab2d6",
+        "#6a3d9a",
+        "#ffff99",
+        "#b15928",
+    ]
+
+    @staticmethod
+    def get_color(index):
+        return PlotOptions._default_colors[index % len(PlotOptions._default_colors)]
+
+    def keys(self):
+        return [
+            "label",
+            "option_index",
+            "color",
+            "marker",
+            "markersize",
+            "ls",
+            "lw",
+            "markerfacecolor",
+            "edgecolor",
+            "vmin",
+            "vmax",
+            "zorder",
+            "hatch",
+            "save_label",
+            "log_data",
+        ]
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+
+class PlotOptionsManager(dict):
+    """Dict-like container for managing :class:`PlotOptions` instances.
+
+    Supports dictionary access patterns::
+
+        pom = PlotOptionsManager()
+        pom.add("RO Membrane", marker="s", lw=2)
+        pom.add("UF Membrane")
+
+        opt = pom["RO Membrane"]          # retrieve by label
+        for label, opt in pom.items():     # iterate
+            ...
+
+    When *option_index* or *color* are not supplied to :meth:`add`, they
+    are assigned automatically based on the number of options already
+    registered.
+    """
+
+    _sentinel = object()
+
+    def add(
+        self,
+        label,
+        option_index=_sentinel,
+        color=_sentinel,
+        marker="o",
+        markersize=4,
+        ls="-",
+        lw=1.5,
+        markerfacecolor="white",
+        edgecolor=None,
+        vmin=None,
+        vmax=None,
+        zorder=4,
+        hatch=None,
+        save_label=None,
+        log_data=True,
+    ):
+        """Register a :class:`PlotOptions` entry.
+
+        Args:
+            label: Display label for the data series.
+            option_index: Index for this option.  Auto-assigned from the
+                current count of registered options when omitted.
+            color: Color string.  Auto-selected from the default palette
+                via :meth:`PlotOptions.get_color` when omitted.
+            marker: Marker style.
+            markersize: Marker size.
+            ls: Line style.
+            lw: Line width.
+            markerfacecolor: Marker face color.
+            edgecolor: Edge color.
+            vmin: Minimum value for colormapping.
+            vmax: Maximum value for colormapping.
+            zorder: Drawing order.
+            hatch: Hatch pattern.
+            save_label: Label used when saving data.
+            log_data: Whether to log data for this series.
+        """
+        if option_index is self._sentinel:
+            option_index = len(self)
+        if color is self._sentinel:
+            color = PlotOptions.get_color(option_index)
+        option = PlotOptions(
+            label,
+            option_index=option_index,
+            color=color,
+            marker=marker,
+            markersize=markersize,
+            ls=ls,
+            lw=lw,
+            markerfacecolor=markerfacecolor,
+            edgecolor=edgecolor,
+            vmin=vmin,
+            vmax=vmax,
+            zorder=zorder,
+            hatch=hatch,
+            save_label=save_label,
+            log_data=log_data,
+        )
+        self[label] = option
+        return option
+
+    def register(self, options):
+        """Bulk-register plot options from a list or dictionary.
+
+        Args:
+            options: either a list of label strings, or a dictionary
+                mapping labels to dicts of :class:`PlotOptions` keyword
+                arguments.
+
+        Examples::
+
+            pom.register(["A", "B", "C"])
+
+            pom.register({
+                "RO Membrane": {"marker": "s", "lw": 2},
+                "UF Membrane": {"ls": "--"},
+                "NF Membrane": {},
+            })
+        """
+        if isinstance(options, dict):
+            for label, kwargs in options.items():
+                self.add(label, **kwargs)
+        elif isinstance(options, list):
+            for label in options:
+                self.add(label)
+        elif isinstance(options, str):
+            self.add(options)
 
 
 class FigureGenerator:
@@ -118,6 +307,12 @@ class FigureGenerator:
         self.file_name = file_name
         self.figure_description = figure_description
         self.twinx, self.twiny = False, False
+        self._auto_labels = {"x": None, "y": None, "z": None}
+
+    @staticmethod
+    def get_plot_options_manager():
+        """Return a new :class:`PlotOptionsManager` instance."""
+        return PlotOptionsManager()
 
     def _init_data_storage(self, storage_class):
         """Initialise ``data_storage`` on first plot call.
@@ -142,6 +337,36 @@ class FigureGenerator:
                     type(self.data_storage).__name__, storage_class.__name__
                 )
             )
+
+    @staticmethod
+    def _unwrap_psdata(value):
+        """Extract the raw numpy array from a PsData object.
+
+        If *value* is a :class:`~psPlotKit.data_manager.ps_data.PsData`
+        instance, return its ``.data`` attribute; otherwise return *value*
+        unchanged.
+        """
+        if isinstance(value, PsData):
+            return value.data
+        return value
+
+    def _capture_psdata_label(self, value, axis):
+        """Store the auto-label from a PsData object for the given axis."""
+        if isinstance(value, PsData):
+            self._auto_labels[axis] = self._format_psdata_label(value)
+
+    @staticmethod
+    def _format_psdata_label(psdata):
+        """Format a PsData's label and units into an axis label string."""
+        if psdata.mpl_units == "-":
+            return psdata.data_label
+        return "{} ({})".format(psdata.data_label, psdata.mpl_units)
+
+    def _resolve_auto_label(self, label, axis):
+        """If label is 'auto', return stored auto-label for given axis."""
+        if label == "auto":
+            return self._auto_labels.get(axis)
+        return label
 
     def gen_colormap(
         self, num_samples=10, vmin=0, vmax=1, map_name="viridis", return_map=False
@@ -244,6 +469,7 @@ class FigureGenerator:
             self.fig.subplots_adjust(wspace=subplot_adjust)
         self.fig.set_dpi(dpi)
         self.fig.set_size_inches(width, height, forward=True)
+        return self
 
     def get_color(self, ax, val_update=0):
         """Get the current color index for the given axis and optionally advance it.
@@ -301,6 +527,13 @@ class FigureGenerator:
             save_label: Key for storing plotted data; defaults to label.
             log_data: If True, store plotted data for CSV export.
         """
+        self._capture_psdata_label(x_pos, "x")
+        self._capture_psdata_label(x_value, "y")
+        x_pos = self._unwrap_psdata(x_pos)
+        x_value = self._unwrap_psdata(x_value)
+        xerr = self._unwrap_psdata(xerr)
+        yerr = self._unwrap_psdata(yerr)
+        bottom = self._unwrap_psdata(bottom)
         self.box_mode = True
         if color is None:
             color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
@@ -393,6 +626,12 @@ class FigureGenerator:
             save_label: Key for storing plotted data; defaults to label.
             alpha: Fill transparency (0-1).
         """
+        self._capture_psdata_label(xdata, "x")
+        self._capture_psdata_label(ydata, "y")
+        xdata = self._unwrap_psdata(xdata)
+        ydata = self._unwrap_psdata(ydata)
+        x2data = self._unwrap_psdata(x2data)
+        y2data = self._unwrap_psdata(y2data)
         if color is None:
             color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
             self.get_color(ax_idx, 1)
@@ -445,8 +684,7 @@ class FigureGenerator:
         xdata=None,
         ydata=None,
         marker_overlay=None,
-        marker_ranges=[1, 2, 3, 4, 5, 6],
-        marker_types=["o", "d", "s", ">", "<"],
+        marker_dict=None,
         marker_overlay_labels=None,
         label="",
         marker="",
@@ -457,7 +695,7 @@ class FigureGenerator:
         color=None,
         ax_idx=0,
         zorder=4,
-        clip_on=True,
+        clip_on=False,
         save_label=None,
         sort_data=True,
         log_data=True,
@@ -469,8 +707,7 @@ class FigureGenerator:
             xdata: X-coordinates.
             ydata: Y-coordinates.
             marker_overlay: Data array for assigning different markers to segments.
-            marker_ranges: Boundaries for marker overlay binning.
-            marker_types: Marker styles for each overlay bin.
+           marker_dict: a dict that connects desired value to marker ({1: 'o', 2: 's'})
             marker_overlay_labels: Labels for each marker overlay segment.
             label: Legend label.
             color: Line color; auto-selected from colormap if None.
@@ -478,6 +715,11 @@ class FigureGenerator:
             sort_data: If True, sort data by x values before plotting.
             log_data: If True, store plotted data for CSV export.
         """
+        self._capture_psdata_label(xdata, "x")
+        self._capture_psdata_label(ydata, "y")
+        xdata = self._unwrap_psdata(xdata)
+        ydata = self._unwrap_psdata(ydata)
+        marker_overlay = self._unwrap_psdata(marker_overlay)
         if color is None:
             color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
             self.get_color(ax_idx, 1)
@@ -507,21 +749,19 @@ class FigureGenerator:
                 zorder=zorder,
                 markersize=markersize,
             )
-            for i, k in enumerate(marker_ranges[1:]):
-                plot_range = np.where(
-                    (marker_overlay < k) & (marker_overlay >= marker_ranges[i])
-                )[0]
+            for value, marker in marker_dict.items():
+                plot_range = np.where(marker_overlay == value)[0]
 
                 if len(plot_range) > 0:
                     if marker_overlay_labels == None:
-                        label = label
+                        label = None
                     else:
                         label = marker_overlay_labels[i]
                     self.get_axis(ax_idx).plot(
                         xdata[plot_range],
                         ydata[plot_range],
                         label=label,
-                        marker=marker_types[i],
+                        marker=marker,
                         markerfacecolor=markerfacecolor,
                         color=color,
                         lw=lw,
@@ -595,6 +835,12 @@ class FigureGenerator:
             save_label: Key for storing plotted data.
             digitize_levels: Levels for discretizing zdata colors.
         """
+        self._capture_psdata_label(xdata, "x")
+        self._capture_psdata_label(ydata, "y")
+        self._capture_psdata_label(zdata, "z")
+        xdata = self._unwrap_psdata(xdata)
+        ydata = self._unwrap_psdata(ydata)
+        zdata = self._unwrap_psdata(zdata)
         if self.projection == None:
             if zdata is None:
                 if color is None:
@@ -745,6 +991,12 @@ class FigureGenerator:
             log_data: If True, store plotted data for CSV export.
             save_label: Key for storing plotted data; defaults to label.
         """
+        self._capture_psdata_label(xdata, "x")
+        self._capture_psdata_label(ydata, "y")
+        xdata = self._unwrap_psdata(xdata)
+        ydata = self._unwrap_psdata(ydata)
+        xerr = self._unwrap_psdata(xerr)
+        yerr = self._unwrap_psdata(yerr)
         if color is None:
             color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
             self.get_color(ax_idx, 1)
@@ -793,6 +1045,7 @@ class FigureGenerator:
         Returns:
             Tuple of (bin_edges, normalized_cdf).
         """
+        data = self._unwrap_psdata(data)
         bins = np.linspace(min(data), max(data), num_bins)
         counts, binedges = np.histogram(data, bins=bins)
         cdf = np.cumsum(counts)
@@ -827,6 +1080,7 @@ class FigureGenerator:
             plot_line: If True, plot as a line; otherwise as a standard histogram.
             norm: If True, normalize counts by the maximum value.
         """
+        data = self._unwrap_psdata(data)
         if color is None:
             color = self.colorMaps[self.colormaps][self.get_color(ax_idx)]
             self.get_color(ax_idx, 1)
@@ -876,6 +1130,7 @@ class FigureGenerator:
             save_label: Key for storing plotted data.
             log_data: If True, store plotted data for CSV export.
         """
+        data = self._unwrap_psdata(data)
         self.box_mode = True
         medianprops = {"color": "black", "linewidth": 1}
         if color is None:
@@ -1203,6 +1458,13 @@ class FigureGenerator:
             digitize_levels: Levels for discretizing the color map.
             digitize_colors: Colors for discretized levels.
         """
+        self._capture_psdata_label(xdata, "x")
+        self._capture_psdata_label(ydata, "y")
+        self._capture_psdata_label(zdata, "z")
+        xdata = self._unwrap_psdata(xdata)
+        ydata = self._unwrap_psdata(ydata)
+        zdata = self._unwrap_psdata(zdata)
+        zoverlay = self._unwrap_psdata(zoverlay)
         self.map_mode = True
         datax, datay = None, None
         if build_map:
@@ -1485,10 +1747,12 @@ class FigureGenerator:
                 fontsize=fontsize,
             )
         if xlabel is not None:
+            xlabel = self._resolve_auto_label(xlabel, "x")
             self.get_axis(ax_idx).set_xlabel(xlabel, labelpad=xlabelpad)
             if self.data_storage is not None:
                 self.data_storage.update_labels(xlabel=xlabel)
         if ylabel is not None:
+            ylabel = self._resolve_auto_label(ylabel, "y")
             self.get_axis(ax_idx).set_ylabel(ylabel, labelpad=ylabelpad)
             if self.data_storage is not None:
                 self.data_storage.update_labels(ylabel=ylabel)
@@ -1537,11 +1801,24 @@ class FigureGenerator:
         Returns:
             Tuple of (min_value, max_value).
         """
+        # Map legacy key names to data_storage key names
+        _stream_map = {"datax": "x", "datay": "y", "dataz": "z"}
+        key = _stream_map.get(data_stream, data_stream)
+
         data = []
-        for key in self.plotted_data.keys():
-            if key != "xlabel" and key != "ylabel":
-                if len(self.plotted_data[key]["datax"]) > 0:
-                    data += list(self.plotted_data[key][data_stream])
+        if self.data_storage is not None and self.data_storage._data:
+            storage_data = self.data_storage._data
+            if isinstance(self.data_storage, (LineDataStorage, ErrorBarDataStorage)):
+                for series_label, series in storage_data.items():
+                    if key in series and len(series[key]) > 0:
+                        data += list(series[key])
+            elif isinstance(self.data_storage, MapDataStorage):
+                if key in storage_data and len(storage_data[key]) > 0:
+                    arr = np.asarray(storage_data[key])
+                    data += list(arr.flatten())
+
+        if not data:
+            raise ValueError("No data available for '{}'".format(data_stream))
         v_min = min(data)
         v_max = max(data)
         return v_min, v_max
@@ -1707,18 +1984,21 @@ class FigureGenerator:
                     ticker.LogLocator(numticks=999, subs="auto")
                 )
         if xlabel is not None:
+            xlabel = self._resolve_auto_label(xlabel, "x")
             self.get_axis(ax_idx).set_xlabel(
                 xlabel, labelpad=xlabelpad, rotation=xlabelrotate
             )
             if self.data_storage is not None:
                 self.data_storage.update_labels(xlabel=xlabel)
         if ylabel is not None:
+            ylabel = self._resolve_auto_label(ylabel, "y")
             self.get_axis(ax_idx).set_ylabel(
                 ylabel, labelpad=ylabelpad, rotation=ylabelrotate
             )
             if self.data_storage is not None:
                 self.data_storage.update_labels(ylabel=ylabel)
         if zlabel is not None and self.mode_3d:
+            zlabel = self._resolve_auto_label(zlabel, "z")
             self.get_axis(ax_idx).set_zlabel(
                 zlabel, labelpad=zlabelpad, rotation=zlabelrotate
             )
@@ -1768,6 +2048,7 @@ class FigureGenerator:
         else:
             cbar.set_ticks(zticks)
         cbar.set_ticklabels(self.format_ticks(zticks, zformat))
+        zlabel = self._resolve_auto_label(zlabel, "z")
         cbar.set_label(zlabel, rotation=-90, labelpad=zlabelpad)
         if self.data_storage is not None:
             self.data_storage.update_labels(zlabel=zlabel)
@@ -1864,7 +2145,7 @@ class FigureGenerator:
         """
         return [self.format_value(tick, decimals) for tick in ticks]
 
-    def save_fig(self, save_jpg=True, save_svg=True, name="output_fig"):
+    def save_fig(self, name="output_fig", save_jpg=True, save_svg=True):
         """Save the figure as both JPG and SVG files.
 
         Args:
