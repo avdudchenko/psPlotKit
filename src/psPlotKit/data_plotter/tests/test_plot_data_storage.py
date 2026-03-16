@@ -97,14 +97,19 @@ class TestLineDataStorage:
         assert rows[0][0] == "A"  # series label row
         assert rows[1][0] == "x"  # axis label row
 
-    def test_overwrite_series(self):
+    def test_duplicate_label_auto_indexes(self):
         s = LineDataStorage()
         s.register_data("A", [1, 2], [3, 4])
         s.register_data("A", [5, 6], [7, 8])
+        # Second registration should become "A_1"
+        assert list(s._data.keys()) == ["A", "A_1"]
+        assert s._series_order == ["A", "A_1"]
         rows = s._build_csv_data()
-        # 2 headers + 2 data rows
+        # 2 headers + 2 data rows, 4 columns (2 series × 2)
         assert len(rows) == 4
-        assert float(rows[2][0]) == 5.0
+        assert rows[0] == ["A", "", "A_1", ""]
+        assert float(rows[2][0]) == 1.0
+        assert float(rows[2][2]) == 5.0
 
 
 # ---------------------------------------------------------------------------
@@ -314,3 +319,58 @@ class TestBoxDataStorage:
         assert os.path.exists(path)
         rows = _read_csv(path)
         assert len(rows) == 2
+
+
+# ---------------------------------------------------------------------------
+# Auto-indexing duplicate labels
+# ---------------------------------------------------------------------------
+
+
+class TestAutoIndexing:
+    """Verify that duplicate labels are auto-indexed across all storage types."""
+
+    def test_resolve_label_unique(self):
+        s = PlotDataStorage()
+        assert s._resolve_label("A") == "A"
+
+    def test_resolve_label_duplicate(self):
+        s = PlotDataStorage()
+        s._data["A"] = {}
+        assert s._resolve_label("A") == "A_1"
+
+    def test_resolve_label_triple(self):
+        s = PlotDataStorage()
+        s._data["A"] = {}
+        s._data["A_1"] = {}
+        assert s._resolve_label("A") == "A_2"
+
+    def test_line_duplicate_three_times(self):
+        s = LineDataStorage()
+        s.register_data("S", [1], [2])
+        s.register_data("S", [3], [4])
+        s.register_data("S", [5], [6])
+        assert list(s._data.keys()) == ["S", "S_1", "S_2"]
+        assert s._series_order == ["S", "S_1", "S_2"]
+
+    def test_errorbar_duplicate(self):
+        s = ErrorBarDataStorage()
+        s.register_data("E", [1], [2], yerr=[0.1])
+        s.register_data("E", [3], [4], yerr=[0.2])
+        assert list(s._data.keys()) == ["E", "E_1"]
+        assert s._series_order == ["E", "E_1"]
+        assert float(s._data["E"]["y"][0]) == 2.0
+        assert float(s._data["E_1"]["y"][0]) == 4.0
+
+    def test_bar_duplicate(self):
+        s = BarDataStorage()
+        s.register_data("B", 0, 10)
+        s.register_data("B", 5, 15)
+        assert list(s._data.keys()) == ["B", "B_1"]
+        assert s._bar_order == ["B", "B_1"]
+
+    def test_box_duplicate(self):
+        s = BoxDataStorage()
+        s.register_data("X", [1, 2, 3])
+        s.register_data("X", [4, 5, 6])
+        assert list(s._data.keys()) == ["X", "X_1"]
+        assert s._box_order == ["X", "X_1"]

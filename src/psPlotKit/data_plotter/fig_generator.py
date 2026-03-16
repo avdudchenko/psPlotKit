@@ -111,6 +111,10 @@ class PlotOptions:
     def __getitem__(self, key):
         return getattr(self, key)
 
+    def copy(self):
+        """Return a shallow copy of this PlotOptions instance."""
+        return PlotOptions(**{k: getattr(self, k) for k in self.keys()})
+
 
 class PlotOptionsManager(dict):
     """Dict-like container for managing :class:`PlotOptions` instances.
