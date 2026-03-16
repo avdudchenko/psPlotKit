@@ -240,17 +240,16 @@ class PsDataManager(dict):
         work_keys=["control_volume.work[0.0]"],
         include_indirect_in_device_costs=True,
     ):
-        for instance in self.PsDataImportInstances:
-            costing_tool = PsCosting(
-                instance,
-                costing_block=costing_block,
-                costing_key=costing_key,
-                default_flow=default_flow,
-                work_keys=work_keys,
-                include_indirect_in_device_costs=include_indirect_in_device_costs,
-            )
-            costing_tool.define_groups(costing_groups)
-            costing_tool.get_costing_data(PsDataManager=self)
+        costing_tool = PsCosting(
+            self.PsDataImportInstances,
+            costing_block=costing_block,
+            costing_key=costing_key,
+            default_flow=default_flow,
+            work_keys=work_keys,
+            include_indirect_in_device_costs=include_indirect_in_device_costs,
+        )
+        costing_tool.define_groups(costing_groups)
+        costing_tool.get_costing_data(PsDataManager=self)
 
     def _get_data_key(self, udir):
         if isinstance(udir, tuple):
@@ -692,7 +691,7 @@ class PsDataManager(dict):
             return sorted_idxs, idxs, idx_type
 
         for udir in self.keys():
-            if "stacked_data" not in str(udir) and str(data_key) in str(
+            if new_directory not in str(udir) and str(data_key) in str(
                 self._get_data_key(udir)
             ):
 
@@ -719,6 +718,7 @@ class PsDataManager(dict):
                         )
                     ukey = list(ukey)
                     for dkey in stack_keys:
+                        # print(stack_keys, dkey)
                         ukey.remove(dkey)
                     if len(ukey) == 1:
                         ukey = ukey[0]
@@ -877,7 +877,7 @@ class PsDataManager(dict):
         current_keys = self.data_keys[:]
         for data_key in current_keys:
             if stack_directory not in str(data_key):
-                print("stack_keys", stack_keys, data_key)
+                # print("stack_keys", stack_keys, data_key)
                 self.generate_data_stack(
                     stack_keys,
                     data_key,

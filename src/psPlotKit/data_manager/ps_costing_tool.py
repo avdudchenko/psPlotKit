@@ -11,16 +11,23 @@ _logger = logger.define_logger(__name__, "PsCosting")
 class PsCosting:
     def __init__(
         self,
-        psManager,
+        data_import_instance,
         costing_block="fs.costing",
         costing_key="costing",
         default_flow="fs.product.properties[0.0].flow_vol_phase[Liq]",
         work_keys=["control_volume.work[0.0]"],
         include_indirect_in_device_costs=True,
     ):
+        self.all_available_data_keys = []
+        if isinstance(data_import_instance, list):
+            for inst in data_import_instance:
+                self.all_available_data_keys = (
+                    self.all_available_data_keys + inst.unique_data_keys
+                )
+        else:
+            self.all_available_data_keys = data_import_instance.unique_data_keys
         self.default_costing_block = costing_block
         self.costing_key = costing_key
-        self.psManager = psManager
         self.default_flow = default_flow
         self.define_device_energy_pars(work_keys)
         self.default_costing()
@@ -450,7 +457,7 @@ class PsCosting:
         self.costing_block_keys = []
         self.loaded_costing_pars = []
         self.costed_devices = {}
-        for key in self.psManager.unique_data_keys:
+        for key in self.all_available_data_keys:
 
             for sf, config in self.default_costing_params.items():
                 if "{}.{}".format(self.default_costing_block, sf) == key or sf == key:
@@ -494,7 +501,7 @@ class PsCosting:
                 for work_key in self.default_device_work_keys:
                     if (
                         "{}.{}".format(key_device, work_key)
-                        in self.psManager.unique_data_keys
+                        in self.all_available_data_keys
                     ):
                         if (
                             "{}.{}".format(key_device, work_key)
