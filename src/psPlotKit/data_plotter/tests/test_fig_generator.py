@@ -424,6 +424,30 @@ class TestPsDataUnwrap:
 # ---------------------------------------------------------------------------
 
 
+class TestPlotOptionsCopy:
+    def test_copy_returns_new_instance(self):
+        opt = PlotOptions(label="A", color="red", marker="x")
+        clone = opt.copy()
+        assert clone is not opt
+        assert isinstance(clone, PlotOptions)
+
+    def test_copy_preserves_values(self):
+        opt = PlotOptions(label="A", color="red", marker="x", lw=3.0)
+        clone = opt.copy()
+        assert clone.label == "A"
+        assert clone.color == "red"
+        assert clone.marker == "x"
+        assert clone.lw == 3.0
+
+    def test_copy_is_independent(self):
+        opt = PlotOptions(label="A", color="red")
+        clone = opt.copy()
+        clone.color = "blue"
+        clone.label = "B"
+        assert opt.color == "red"
+        assert opt.label == "A"
+
+
 class TestPlotOptionsManager:
     def test_add_returns_plot_options(self):
         pom = PlotOptionsManager()
