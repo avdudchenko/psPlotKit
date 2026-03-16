@@ -38,6 +38,26 @@ class PlotDataStorage:
         if zlabel is not None:
             self.zlabel = zlabel
 
+    def _resolve_label(self, label):
+        """Return a unique label, auto-indexing if *label* already exists.
+
+        If ``label`` is not yet present in ``_data`` it is returned as-is.
+        Otherwise ``label_1``, ``label_2``, … is tried until a free key is
+        found.
+
+        Args:
+            label: Proposed label string.
+
+        Returns:
+            A label string guaranteed to be absent from ``self._data``.
+        """
+        if label not in self._data:
+            return label
+        idx = 1
+        while f"{label}_{idx}" in self._data:
+            idx += 1
+        return f"{label}_{idx}"
+
     def _build_csv_data(self):
         """Build the row list for CSV export.
 
@@ -94,10 +114,13 @@ class LineDataStorage(PlotDataStorage):
         """Register a line data series.
 
         Args:
-            label: Unique name for the series (used as column header).
+            label: Name for the series (used as column header).  If a
+                series with the same label already exists it will be
+                auto-indexed (e.g. ``label_1``, ``label_2``, …).
             xdata: Array-like of x values.
             ydata: Array-like of y values (same length as *xdata*).
         """
+        label = self._resolve_label(label)
         xdata = np.asarray(xdata).flatten()
         ydata = np.asarray(ydata).flatten()
         if len(xdata) != len(ydata):
@@ -107,8 +130,7 @@ class LineDataStorage(PlotDataStorage):
                 )
             )
         self._data[label] = {"x": xdata, "y": ydata}
-        if label not in self._series_order:
-            self._series_order.append(label)
+        self._series_order.append(label)
 
     def _build_csv_data(self):
         rows = []
@@ -167,12 +189,15 @@ class ErrorBarDataStorage(PlotDataStorage):
         """Register an error-bar data series.
 
         Args:
-            label: Unique name for the series (used as column header).
+            label: Name for the series (used as column header).  If a
+                series with the same label already exists it will be
+                auto-indexed (e.g. ``label_1``, ``label_2``, …).
             xdata: Array-like of x values.
             ydata: Array-like of y values.
             xerr: Optional array-like of x-direction errors.
             yerr: Optional array-like of y-direction errors.
         """
+        label = self._resolve_label(label)
         xdata = np.asarray(xdata).flatten()
         ydata = np.asarray(ydata).flatten()
         if len(xdata) != len(ydata):
@@ -187,8 +212,7 @@ class ErrorBarDataStorage(PlotDataStorage):
         if yerr is not None:
             entry["yerr"] = np.asarray(yerr).flatten()
         self._data[label] = entry
-        if label not in self._series_order:
-            self._series_order.append(label)
+        self._series_order.append(label)
 
     def _build_csv_data(self):
         rows = []
@@ -330,13 +354,15 @@ class BarDataStorage(PlotDataStorage):
         """Register a single bar's range.
 
         Args:
-            label: Bar identifier / category name.
+            label: Bar identifier / category name.  If a bar with the
+                same label already exists it will be auto-indexed
+                (e.g. ``label_1``, ``label_2``, …).
             lower: Lower (bottom) value of the bar.
             upper: Upper (top) value of the bar.
         """
+        label = self._resolve_label(label)
         self._data[label] = {"lower": lower, "upper": upper}
-        if label not in self._bar_order:
-            self._bar_order.append(label)
+        self._bar_order.append(label)
 
     def _build_csv_data(self):
         rows = []
@@ -381,14 +407,14 @@ class BoxDataStorage(PlotDataStorage):
         """
         if whiskers is None:
             whiskers = [5, 95]
+        label = self._resolve_label(label)
         data = np.asarray(data).flatten()
         percentiles = np.percentile(data, [whiskers[0], 25, 50, 75, whiskers[1]])
         self._data[label] = {
             "percentiles": percentiles,
             "whiskers": whiskers,
         }
-        if label not in self._box_order:
-            self._box_order.append(label)
+        self._box_order.append(label)
 
     def _build_csv_data(self):
         rows = []
