@@ -1028,3 +1028,91 @@ class TestAddDataAutoWrap:
         result = data_manager.get_data("test_dir", "single")
         assert isinstance(result, PsData)
         assert float(result.data) == 42.0
+
+
+# ---------- register_data_file ----------
+
+
+class TestRegisterDataFile:
+    def test_register_stores_entry(self):
+        """register_data_file should store file info in _registered_data_files."""
+        dm = PsDataManager()
+        dm.register_data_file(_test_file)
+        assert len(dm._registered_data_files) == 1
+        assert dm._registered_data_files[0]["file"] == _test_file
+        assert dm._registered_data_files[0]["directory"] is None
+
+    def test_register_with_directory(self):
+        """register_data_file with a directory should store both fields."""
+        dm = PsDataManager()
+        dm.register_data_file(_test_file, directory="custom_dir")
+        assert dm._registered_data_files[0]["directory"] == "custom_dir"
+
+    def test_register_multiple_files(self):
+        """Multiple registrations should accumulate."""
+        dm = PsDataManager()
+        dm.register_data_file(_test_file)
+        dm.register_data_file(_test_single_file, directory="single")
+        assert len(dm._registered_data_files) == 2
+
+    def test_load_data_processes_registered_files(self):
+        """Registered files should be imported when load_data is called."""
+        dm = PsDataManager()
+        dm.register_data_file(_test_file)
+        dm.register_data_key("LCOW", "LCOW")
+        dm.load_data()
+        lcow_keys = [k for k in dm.keys() if "LCOW" in str(k)]
+        assert len(lcow_keys) > 0
+
+    def test_registered_files_cleared_after_load(self):
+        """After load_data, _registered_data_files should be empty."""
+        dm = PsDataManager()
+        dm.register_data_file(_test_file)
+        dm.register_data_key("LCOW", "LCOW")
+        dm.load_data()
+        assert len(dm._registered_data_files) == 0
+
+    def test_registered_files_become_import_instances(self):
+        """Registered files should result in PsDataImport instances."""
+        dm = PsDataManager()
+        dm.register_data_file(_test_file)
+        dm.register_data_key("LCOW", "LCOW")
+        dm.load_data()
+        assert len(dm.PsDataImportInstances) == 1
+
+    def test_register_file_with_constructor_files(self):
+        """Registered files are processed alongside constructor-provided files."""
+        dm = PsDataManager(_test_file)
+        dm.register_data_file(_test_single_file)
+        dm.register_data_key("LCOW", "LCOW")
+        dm.load_data()
+        assert len(dm.PsDataImportInstances) == 2
+        lcow_keys = [k for k in dm.keys() if "LCOW" in str(k)]
+        assert len(lcow_keys) > 0
+
+    def test_register_file_with_directory_sets_return_dir(self):
+        """The directory param should be passed as default_return_directory."""
+        dm = PsDataManager()
+        dm.register_data_file(_test_single_file, directory="my_dir")
+        dm._load_registered_data_files()
+        # The import instance should have the custom directory
+        assert dm.PsDataImportInstances[0].default_return_directory == "my_dir"
+
+    def test_no_registered_files_works(self):
+        """load_data with no registered files and no constructor files
+        should not error when given data via add_data instead."""
+        dm = PsDataManager()
+        dm.add_data("d", "a", PsData("a", "t", np.array([1.0])))
+        # Should not raise even with no import instances
+        dm.load_data(check_import_status=False, evaluate_expressions=False)
+
+    def test_second_load_does_not_reimport_registered(self):
+        """Calling load_data a second time should not re-process
+        already-loaded registered files."""
+        dm = PsDataManager()
+        dm.register_data_file(_test_file)
+        dm.register_data_key("LCOW", "LCOW")
+        dm.load_data()
+        count_after_first = len(dm.PsDataImportInstances)
+        dm.load_data()
+        assert len(dm.PsDataImportInstances) == count_after_first

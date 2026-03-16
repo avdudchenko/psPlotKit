@@ -33,9 +33,9 @@ class PsDataManager(dict):
         self._registered_expressions = []
         self._expression_keys = None
         self.auto_evaluate_expressions = True
+        self.PsDataImportInstances = []
+        self._registered_data_files = []
         if data_files is not None:
-
-            self.PsDataImportInstances = []
             if isinstance(data_files, str):
                 self.PsDataImportInstances.append(PsDataImport(data_files))
             else:
@@ -48,6 +48,29 @@ class PsDataManager(dict):
                         self.PsDataImportInstances.append(
                             PsDataImport(file_loc, default_return_directory=directory)
                         )
+
+    def register_data_file(self, file_location, directory=None):
+        """Register a data file to be imported when :meth:`load_data` is called.
+
+        Args:
+            file_location: path to an ``.h5`` or ``.json`` data file.
+            directory: (optional) default return directory label for the file.
+        """
+        self._registered_data_files.append(
+            {"file": file_location, "directory": directory}
+        )
+
+    def _load_registered_data_files(self):
+        """Create :class:`PsDataImport` instances for any registered files
+        and clear the registration list."""
+        for entry in self._registered_data_files:
+            self.PsDataImportInstances.append(
+                PsDataImport(
+                    entry["file"],
+                    default_return_directory=entry["directory"],
+                )
+            )
+        self._registered_data_files.clear()
 
     def load_data(
         self,
@@ -87,6 +110,7 @@ class PsDataManager(dict):
                 evaluate_expressions: (optional) - if True, run evaluate_expressions after loading (default True)
                 raise_error: (optional) - if True, check_import_status will raise KeyError on missing keys (default True)
         """
+        self._load_registered_data_files()
         if data_key_list is None:
             data_key_list = self.registered_key_list
         elif data_key_list is not None and self.registered_key_list is not None:
@@ -625,7 +649,12 @@ class PsDataManager(dict):
         )
 
     def generate_data_stack(
-        self, stack_keys, data_key, reduction_type, pad_missing_data=False
+        self,
+        stack_keys,
+        data_key,
+        reduction_type,
+        pad_missing_data=False,
+        new_directory=None,
     ):
         """stacks data into single dataset from diffrent directories
         stack_keys: defines over which keys that data would be stacked, will auto identify indexes
@@ -633,11 +662,14 @@ class PsDataManager(dict):
         reduction_type: if data to be used to generate a reduction index global to given directory
         pad_missing_data: if global filter is available, and matches current directory will pad with specified value
         will add a new data set to unique directory with map, returns the newly generated keys
+        new_directory: (optional) - custom directory to create for storing stacked data, this will be added to existing data directory
         """
         dir_to_stack = []
         stack_idxs = []
         unique_dirs = {}
         working_dirs = []
+        if new_directory is None:
+            new_directory = self.reduced_data
 
         def search_dir(stack_keys, dkey):
             for udir in stack_keys:
@@ -784,7 +816,7 @@ class PsDataManager(dict):
                     idx_data = PsData(
                         stack_keys, "stacked_data_idxs", map_idxs, "dimensionless"
                     )
-                    new_dir = [self.reduced_data]
+                    new_dir = [new_directory]
                     if uq is not None:
                         new_dir.append(uq)
 
@@ -839,16 +871,19 @@ class PsDataManager(dict):
             raise TypeError("Reduction type {} not implemented".format(reduction_type))
         return r_idx, sd
 
-    def stack_all_data(self, stack_keys, pad_missing_data):
+    def stack_all_data(self, stack_keys, pad_missing_data, stack_directory=None):
+        if stack_directory is None:
+            stack_directory = self.reduced_data
         current_keys = self.data_keys[:]
         for data_key in current_keys:
-            if self.reduced_data not in str(data_key):
+            if stack_directory not in str(data_key):
                 print("stack_keys", stack_keys, data_key)
                 self.generate_data_stack(
                     stack_keys,
                     data_key,
                     reduction_type=None,
                     pad_missing_data=pad_missing_data,
+                    new_directory=stack_directory,
                 )
 
     def reduce_data(
@@ -858,6 +893,7 @@ class PsDataManager(dict):
         reduction_type=None,
         stack_all_data=True,
         pad_missing_data=0,
+        directory=None,
     ):
         """this function will stack data based on axis using min, max or unique function
         stack_keys: keys that identify a stack (example is 'number_of_stages' or 'flow_mass_phase_comp)
@@ -875,11 +911,11 @@ class PsDataManager(dict):
             mask_data = True
             self.mask_data = False
         self.global_reduction_directory = self.generate_data_stack(
-            stack_keys, data_key, reduction_type
+            stack_keys, data_key, reduction_type, new_directory=directory
         )
 
         if stack_all_data:
-            self.stack_all_data(stack_keys, pad_missing_data)
+            self.stack_all_data(stack_keys, pad_missing_data, stack_directory=directory)
         self.mask_data = mask_data
 
     def check_import_status(self, raise_error=False):
