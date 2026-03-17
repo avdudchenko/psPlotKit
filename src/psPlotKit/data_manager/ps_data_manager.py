@@ -980,7 +980,12 @@ class PsDataManager(dict):
             )
 
     def register_expression(
-        self, expression, return_key, units=None, assign_units=None
+        self,
+        expression,
+        return_key,
+        units=None,
+        assign_units=None,
+        zero_if_missing=False,
     ):
         """Register an arithmetic expression to be evaluated on imported data.
 
@@ -1001,6 +1006,11 @@ class PsDataManager(dict):
             return_key: key under which the result will be stored.
             units: (optional) units to convert the result to after evaluation.
             assign_units: (optional) units to assign to the result.
+            zero_if_missing: if *True*, any required key that is absent in a
+                directory will be replaced with a zero-valued array (matching
+                the shape of an available sibling key) instead of skipping
+                the entire directory.  Useful for summing discovered cost
+                keys that only exist in some directories.
 
         Raises:
             TypeError: if *expression* is a string or anything other than an
@@ -1026,8 +1036,14 @@ class PsDataManager(dict):
                 "return_key": return_key,
                 "units": units,
                 "assign_units": assign_units,
+                "zero_if_missing": zero_if_missing,
             }
         )
+        # Make the return_key immediately available in ExpressionKeys so
+        # that downstream expressions can reference it during tree building,
+        # even before evaluate_expressions() stores actual data.
+        if self._expression_keys is not None:
+            self._expression_keys.add_key(return_key)
         # Auto-evaluate if data is already loaded
         if self.auto_evaluate_expressions and len(self) > 0:
             self.evaluate_expressions()
@@ -1053,6 +1069,7 @@ class PsDataManager(dict):
             return_key = expr_def["return_key"]
             units = expr_def["units"]
             assign_units = expr_def["assign_units"]
+            zero_if_missing = expr_def.get("zero_if_missing", False)
             required_keys = expression.required_keys
 
             evaluated_count = 0
@@ -1067,16 +1084,44 @@ class PsDataManager(dict):
                     except KeyError:
                         all_found = False
                         missing_key = rk
-                        break
+                        if not zero_if_missing:
+                            break
 
-                if not all_found:
-                    _logger.warning(
-                        "Expression for '{}': skipping directory '{}' — "
+                if not all_found and not zero_if_missing:
+                    _logger.debug(
+                        "Expression for '{}': skipping directory '{}' - "
                         "could not find key '{}'".format(
                             return_key, dir_key, missing_key
                         )
                     )
                     continue
+
+                if not all_found:
+                    # zero_if_missing: fill missing keys with zero PsData
+                    ref_shape = None
+                    for v in data_dict.values():
+                        ref_shape = np.asarray(v.data).shape
+                        break
+                    if ref_shape is None:
+                        # All keys missing — no reference shape available
+                        _logger.debug(
+                            "Expression for '{}': skipping directory '{}' - "
+                            "all required keys missing.".format(return_key, dir_key)
+                        )
+                        continue
+                    for rk in required_keys:
+                        if rk not in data_dict:
+                            data_dict[rk] = PsData(
+                                data_key=rk,
+                                data_type="zero_fill",
+                                data_array=np.zeros(ref_shape),
+                            )
+                            _logger.debug(
+                                "Expression for '{}': filled missing key "
+                                "'{}' with zeros in directory '{}'.".format(
+                                    return_key, rk, dir_key
+                                )
+                            )
 
                 # Evaluate the expression tree
                 try:
@@ -1088,6 +1133,21 @@ class PsDataManager(dict):
                         )
                     )
                     continue
+
+                # Apply unit conversion on the raw Quantity before wrapping
+                # in PsData, so that compound units (e.g. W*USD/kWh) are
+                # handled by the quantities library directly rather than
+                # going through PsData's string-based unit roundtrip which
+                # can lose dimensional information.
+                if units is not None and hasattr(result_quantity, "rescale"):
+                    try:
+                        result_quantity = result_quantity.rescale(units)
+                    except Exception as e:
+                        _logger.warning(
+                            "Expression for '{}' failed unit conversion "
+                            "in directory '{}': {}".format(return_key, dir_key, e)
+                        )
+                        continue
 
                 # Wrap the result in a PsData
                 result = PsData(
@@ -1105,7 +1165,9 @@ class PsDataManager(dict):
                 if assign_units is not None:
                     result.assign_units(assign_units)
                 if units is not None:
-                    result.to_units(units)
+                    # Already rescaled above; assign the target units
+                    # to ensure PsData reflects them correctly.
+                    result.assign_units(units)
 
                 self.add_data(dir_key, return_key, result)
                 evaluated_count += 1
@@ -1116,7 +1178,7 @@ class PsDataManager(dict):
                     "any directory.".format(return_key)
                 )
             else:
-                _logger.info(
+                _logger.debug(
                     "Expression evaluated in {} directory(ies) as '{}'.".format(
                         evaluated_count, return_key
                     )

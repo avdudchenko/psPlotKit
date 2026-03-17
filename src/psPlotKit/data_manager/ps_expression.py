@@ -19,6 +19,7 @@ Example::
 
 import re
 import numpy as np
+import quantities as qs
 from collections import defaultdict
 from psPlotKit.util.logger import define_logger
 
@@ -176,7 +177,13 @@ class ExpressionNode:
         """
         # --- leaf: data-key reference ---
         if self.key is not None:
-            return data_dict[self.key].data_with_units
+            value = data_dict[self.key].data_with_units
+            if (
+                isinstance(value, qs.Quantity)
+                and value.dimensionality == qs.dimensionless.dimensionality
+            ):
+                return value.magnitude.copy()
+            return value
 
         # --- leaf: numeric constant ---
         if self.value is not None:
@@ -185,6 +192,29 @@ class ExpressionNode:
         # --- internal: operation ---
         left_val = self.left.evaluate(data_dict)
         right_val = self.right.evaluate(data_dict)
+
+        # When one operand is a Quantity and the other is a plain
+        # number/array (from dimensionless data or a constant), the
+        # ``quantities`` library would raise a unit-conversion error on
+        # addition / subtraction.  For those ops we temporarily strip
+        # units, perform the arithmetic, then re-wrap the result so
+        # downstream calculations retain proper units.  Multiplication,
+        # division and power already work with mixed Quantity / plain
+        # operands and propagate units automatically.
+        left_is_qty = isinstance(left_val, qs.Quantity)
+        right_is_qty = isinstance(right_val, qs.Quantity)
+
+        if self.op in ("+", "-") and (left_is_qty != right_is_qty):
+            # Identify the Quantity so we can restore its units afterwards
+            units = left_val.units if left_is_qty else right_val.units
+            left_mag = left_val.magnitude if left_is_qty else np.asarray(left_val)
+            right_mag = right_val.magnitude if right_is_qty else np.asarray(right_val)
+            if self.op == "+":
+                result = left_mag + right_mag
+            else:
+                result = left_mag - right_mag
+            return qs.Quantity(result, units)
+
         if self.op == "+":
             return left_val + right_val
         elif self.op == "-":
