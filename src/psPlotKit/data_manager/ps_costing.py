@@ -212,10 +212,24 @@ class PsCostingGroup:
         """
         _flow_keys = {}
         if flow_keys:
+            if not isinstance(flow_keys, dict):
+                raise TypeError(
+                    "flow_keys must be a dict mapping flow type names to "
+                    "costing-block key suffixes, e.g. "
+                    '{{"electricity": "control_volume.work"}}. '
+                    "Got {} instead.".format(type(flow_keys).__name__)
+                )
             for ft, suffixes in flow_keys.items():
                 _flow_keys[ft] = _ensure_list(suffixes)
         _flow_from_dm = {}
         if flow_from_data_manager:
+            if not isinstance(flow_from_data_manager, dict):
+                raise TypeError(
+                    "flow_from_data_manager must be a dict mapping flow type "
+                    "names to data manager keys, e.g. "
+                    '{{"electricity": ("stage 1", "pump_work")}}. '
+                    "Got {} instead.".format(type(flow_from_data_manager).__name__)
+                )
             for ft, mapping in flow_from_data_manager.items():
                 if isinstance(mapping, dict):
                     _flow_from_dm[ft] = dict(mapping)
@@ -447,7 +461,7 @@ class PsCostingManager:
     # public API
     # ------------------------------------------------------------------
 
-    def build(self, load_data=True):
+    def build(self, load_data=True, error_on_validation_failure=True):
         """Run the full costing pipeline.
 
         1. Discover cost keys from import instances / data manager.
@@ -462,6 +476,7 @@ class PsCostingManager:
                 after key registration.  Set to *False* if data is already
                 loaded.
         """
+        self.data_manager._load_registered_data_files()
         self._discover_keys()
         self._register_parameters()
         self._register_discovered_keys()
@@ -486,7 +501,7 @@ class PsCostingManager:
             )
         )
 
-        self._validate()
+        self._validate(error_on_failure=error_on_validation_failure)
 
     # ------------------------------------------------------------------
     # key discovery
@@ -586,37 +601,64 @@ class PsCostingManager:
             )
 
     @staticmethod
+    def _match_unit_segments(parts, unit_name):
+        """Find the position where *unit_name* matches within *parts*.
+
+        *unit_name* may be a multi-segment dotted path (e.g.
+        ``"stage[1].RO"``).  Each segment of the unit name is compared
+        against consecutive segments in *parts*:
+
+        * If the unit-name segment contains a bracket (e.g.
+          ``stage[1]``), it must match the key segment **exactly**.
+        * Otherwise only the base name (before any ``[``) is compared,
+          so ``RO`` matches ``RO`` or ``RO[0.0]``.
+
+        Returns:
+            The index of the **last** matched segment in *parts*, or
+            *None* if no match is found.
+        """
+        unit_parts = _split_key(unit_name)
+        n = len(unit_parts)
+        for start in range(len(parts) - n + 1):
+            matched = True
+            for j, up in enumerate(unit_parts):
+                kp = parts[start + j]
+                if "[" in up:
+                    # Exact match required (bracket in unit_name)
+                    if kp != up:
+                        matched = False
+                        break
+                else:
+                    # Base-name match (strip brackets from key segment)
+                    if kp.split("[")[0] != up:
+                        matched = False
+                        break
+            if matched:
+                return start + n - 1  # index of last matched segment
+        return None
+
+    @staticmethod
     def _find_matching_keys(available_keys, unit_name, costing_block_key, suffix):
         """Return h5 keys that match ``*unit_name*costing_block_key*suffix``.
 
-        The match is substring-based: the key must contain
-        ``unit_name``, ``costing_block_key``, and end with (or contain)
-        ``suffix``, and the costing block segment must follow the unit
-        segment.
+        *unit_name* may be a multi-segment path (e.g. ``stage[1].RO``).
+        The match requires that the unit segments appear consecutively
+        in the key, followed (not necessarily immediately) by
+        *costing_block_key*, then *suffix*.
         """
         matches = []
         for key in sorted(available_keys):
             parts = _split_key(key)
-            # Find segments containing unit_name and costing_block_key
-            unit_idx = None
+            unit_end = PsCostingManager._match_unit_segments(parts, unit_name)
+            if unit_end is None:
+                continue
+            # Find costing_block_key after the unit
             costing_idx = None
-            for i, p in enumerate(parts):
-                # strip array index (e.g. "pump[0.0]" → "pump")
-                base = p.split("[")[0]
-                if base == unit_name and unit_idx is None:
-                    unit_idx = i
-                if (
-                    base == costing_block_key
-                    and costing_idx is None
-                    and unit_idx is not None
-                ):
+            for i in range(unit_end + 1, len(parts)):
+                if parts[i].split("[")[0] == costing_block_key:
                     costing_idx = i
-            if (
-                unit_idx is not None
-                and costing_idx is not None
-                and costing_idx > unit_idx
-            ):
-                # Check that suffix matches exactly after the costing block
+                    break
+            if costing_idx is not None:
                 remainder = ".".join(parts[costing_idx + 1 :])
                 if remainder == suffix:
                     matches.append(key)
@@ -626,25 +668,19 @@ class PsCostingManager:
     def _find_matching_unit_keys(available_keys, unit_name, suffix):
         """Return h5 keys matching ``*unit_name*suffix`` (no costing block).
 
-        Used for flow-quantity keys (e.g. ``control_volume.work``) that
-        live directly on a unit model rather than on a costing sub-block.
-        Array indices on individual segments are stripped before
-        comparing to *suffix*.
+        *unit_name* may be a multi-segment path (e.g. ``stage[1].pump``).
+        Array indices on suffix segments are stripped before comparing.
         """
         matches = []
         for key in sorted(available_keys):
             parts = _split_key(key)
-            unit_idx = None
-            for i, p in enumerate(parts):
-                base = p.split("[")[0]
-                if base == unit_name and unit_idx is None:
-                    unit_idx = i
-                    break
-            if unit_idx is not None:
-                remainder_parts = parts[unit_idx + 1 :]
-                stripped = ".".join(p.split("[")[0] for p in remainder_parts)
-                if stripped == suffix:
-                    matches.append(key)
+            unit_end = PsCostingManager._match_unit_segments(parts, unit_name)
+            if unit_end is None:
+                continue
+            remainder_parts = parts[unit_end + 1 :]
+            stripped = ".".join(p.split("[")[0] for p in remainder_parts)
+            if stripped == suffix:
+                matches.append(key)
         return matches
 
     @staticmethod
@@ -652,21 +688,15 @@ class PsCostingManager:
         """Build a unique return key for a discovered cost entry.
 
         When the *file_key* contains array indices on or before the unit
-        segment (e.g. ``stage[1].pump`` or ``ROUnits[1]``) those indices
-        are included so that every instance gets a distinct name.
+        segment(s) (e.g. ``stage[1].pump`` or ``ROUnits[1]``) those
+        indices are included so that every instance gets a distinct name.
         Dots in *suffix* are replaced with underscores.
         """
         safe_suffix = suffix.replace(".", "_")
         parts = _split_key(file_key)
-        # Find the unit segment
-        unit_idx = None
-        for i, p in enumerate(parts):
-            base = p.split("[")[0]
-            if base == unit_name:
-                unit_idx = i
-                break
-        if unit_idx is not None:
-            path_parts = parts[: unit_idx + 1]
+        unit_end = PsCostingManager._match_unit_segments(parts, unit_name)
+        if unit_end is not None:
+            path_parts = parts[: unit_end + 1]
             has_index = any("[" in p for p in path_parts)
             if has_index:
                 label = ".".join(path_parts)
@@ -675,7 +705,8 @@ class PsCostingManager:
                 if label.startswith("fs_"):
                     label = label[3:]
                 return "{}_{}".format(label, safe_suffix)
-        return "{}_{}_{}".format(group_name, unit_name, safe_suffix)
+        safe_unit = unit_name.replace(".", "_").replace("[", "_").replace("]", "")
+        return "{}_{}_{}".format(group_name, safe_unit, safe_suffix)
 
     # ------------------------------------------------------------------
     # registration
@@ -897,6 +928,7 @@ class PsCostingManager:
                         return_key=cost_rk,
                         units=flow_cost_info.get("units"),
                         assign_units=flow_cost_info.get("assign_units"),
+                        zero_if_missing=True,
                     )
                     group_flow_cost_rks.append(cost_rk)
                     _logger.info(
@@ -911,6 +943,7 @@ class PsCostingManager:
                 self.data_manager.register_expression(
                     self._sum_expression(ek, group_flow_cost_rks),
                     return_key=rk,
+                    zero_if_missing=True,
                 )
                 _logger.info(
                     "Expression '{}' = sum of {}.".format(rk, group_flow_cost_rks)
@@ -1012,6 +1045,7 @@ class PsCostingManager:
                     return_key=group_rk,
                     units=fdef["units"],
                     assign_units=fdef["assign_units"],
+                    zero_if_missing=True,
                 )
                 # Alias so chained formulas reference the per-group version
                 alias_map[fdef["return_key"]] = group_rk
@@ -1062,7 +1096,7 @@ class PsCostingManager:
                     )
                 )
 
-    def _validate(self):
+    def _validate(self, error_on_failure=True):
         """Compare total formula results against reference data.
 
         For each registered validation, the total (sum of per-group
@@ -1091,10 +1125,14 @@ class PsCostingManager:
             dirs_tested = 0
             for dir_key in self.data_manager.directory_keys:
                 try:
+
                     total_data = np.asarray(
-                        self.data_manager[(*dir_key, total_rk)].data
+                        self.data_manager.get_data(dir_key, total_rk).data
                     )
-                    ref_data = np.asarray(self.data_manager[(*dir_key, ref_key)].data)
+                    ref_data = np.asarray(
+                        self.data_manager.get_data(dir_key, ref_key).data
+                    )
+
                 except KeyError:
                     continue
 
@@ -1139,7 +1177,8 @@ class PsCostingManager:
                     "Validation FAILED for '{}' (rtol={}).".format(formula_key, rtol)
                 )
                 all_passed = False
-
+                if error_on_failure:
+                    raise ValueError("Validation failed")
         return all_passed
 
     # ------------------------------------------------------------------

@@ -49,3 +49,15 @@ class WaterTapCostingPackage(PsCostingPackage):
             / (ek.product_flow * ek.utilization_factor),
             units="USD/m**3",
         )
+        self.add_formula(
+            "LCOW_opex",
+            lambda ek: (ek.total_operating_cost)
+            / (ek.product_flow * ek.utilization_factor),
+            units="USD/m**3",
+        )
+        self.add_formula(
+            "LCOW_capex",
+            lambda ek: (ek.total_capital_cost * ek.capital_recovery_factor)
+            / (ek.product_flow * ek.utilization_factor),
+            units="USD/m**3",
+        )

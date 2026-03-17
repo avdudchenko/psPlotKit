@@ -1096,38 +1096,42 @@ class PsDataManager(dict):
                     )
                     continue
 
+                has_zero_fill = False
                 if not all_found:
-                    # zero_if_missing: fill missing keys with zero PsData
-                    ref_shape = None
-                    for v in data_dict.values():
-                        ref_shape = np.asarray(v.data).shape
-                        break
-                    if ref_shape is None:
-                        # All keys missing — no reference shape available
-                        _logger.debug(
-                            "Expression for '{}': skipping directory '{}' - "
-                            "all required keys missing.".format(return_key, dir_key)
-                        )
-                        continue
+                    has_zero_fill = True
+                    # zero_if_missing: fill missing keys with scalar zero.
+                    # NumPy broadcasting (0 + array == array) handles shape.
                     for rk in required_keys:
                         if rk not in data_dict:
                             data_dict[rk] = PsData(
                                 data_key=rk,
                                 data_type="zero_fill",
-                                data_array=np.zeros(ref_shape),
+                                data_array=np.array(0),
                             )
                             _logger.debug(
                                 "Expression for '{}': filled missing key "
-                                "'{}' with zeros in directory '{}'.".format(
+                                "'{}' with zero in directory '{}'.".format(
                                     return_key, rk, dir_key
                                 )
                             )
 
-                # Evaluate the expression tree
+                # Propagate zero_fill from upstream expressions: if any
+                # input was itself a zero-fill result, unit mismatches
+                # downstream are expected.
+                if not has_zero_fill:
+                    for v in data_dict.values():
+                        if getattr(v, "data_type", None) == "zero_fill":
+                            has_zero_fill = True
+                            break
+
+                # Evaluate the expression tree.  When zero-filled data is
+                # involved, unit mismatches are expected (dimensionless 0
+                # propagates wrong units), so failures are logged at debug.
+                _log_level = _logger.debug if has_zero_fill else _logger.warning
                 try:
                     result_quantity = expression.evaluate(data_dict)
                 except Exception as e:
-                    _logger.warning(
+                    _log_level(
                         "Expression for '{}' failed in directory '{}': {}".format(
                             return_key, dir_key, e
                         )
@@ -1143,7 +1147,7 @@ class PsDataManager(dict):
                     try:
                         result_quantity = result_quantity.rescale(units)
                     except Exception as e:
-                        _logger.warning(
+                        _log_level(
                             "Expression for '{}' failed unit conversion "
                             "in directory '{}': {}".format(return_key, dir_key, e)
                         )
@@ -1152,7 +1156,7 @@ class PsDataManager(dict):
                 # Wrap the result in a PsData
                 result = PsData(
                     data_key=return_key,
-                    data_type="expression_result",
+                    data_type="zero_fill" if has_zero_fill else "expression_result",
                     data_array=(
                         result_quantity
                         if hasattr(result_quantity, "magnitude")
