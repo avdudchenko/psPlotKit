@@ -504,7 +504,7 @@ class TestPsCostingManagerSynthetic:
                 "c": dm.get_data("d", "c"),
             }
         )
-        assert float(np.asarray(result)) == pytest.approx(6.0)
+        assert float(np.asarray(result).item()) == pytest.approx(6.0)
 
     def test_empty_groups(self):
         """Manager with no groups should not crash."""
@@ -1068,4 +1068,4 @@ class TestPsCostingManagerSynthetic:
         cm._build_total_formula_expressions()
         dm.evaluate_expressions()
 
-        assert cm._validate() is False
+        assert cm._validate(error_on_failure=False) is False
