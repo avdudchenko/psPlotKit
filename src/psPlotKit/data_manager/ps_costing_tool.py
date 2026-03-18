@@ -95,10 +95,7 @@ class PsCosting:
         self.calculate_costs()
 
     def normalize_cost(self, cost):
-        flow_total = (
-            self.global_costs[self.default_flow]
-            * self.global_costs["utilization_factor"]
-        )
+        flow_total = self.global_costs[self.default_flow]
         levelized_cost = cost / flow_total
         return levelized_cost
 

@@ -157,7 +157,6 @@ class PsDataImport:
                 array_being_processed = d.split("/")
                 if "" in array_being_processed:
                     array_being_processed.remove("")
-                print(unique_dir)
                 current_dir = []
                 for _id, key in enumerate(array_being_processed):
                     if str(key) in unique_dir:
@@ -373,7 +372,7 @@ class PsDataImport:
                                 return_dir.remove("_auto_temp")
                             if self.default_return_directory is not None:
                                 idx = [self.default_return_directory]
-                                print(idx, return_dir)
+
                                 if isinstance(return_dir, list):
                                     return_dir = idx + return_dir
                                 else:

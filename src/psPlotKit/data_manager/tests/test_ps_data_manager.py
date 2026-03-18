@@ -767,7 +767,7 @@ class TestEvaluateExpressions:
 
     def test_missing_key_warns_and_skips(self, data_manager, caplog):
         """If a key in the expression doesn't exist in a directory,
-        a warning should be logged and that directory skipped."""
+        a debug message should be logged and that directory skipped."""
         data_manager.register_data_key("LCOW", "LCOW")
         ek = data_manager.get_expression_keys()
         # Manually build an expression that references a non-existent key
@@ -776,7 +776,9 @@ class TestEvaluateExpressions:
 
         import logging
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(
+            logging.DEBUG, logger="psPlotKit.data_manager.ps_data_manager"
+        ):
             data_manager.load_data()
 
         assert "nonexistent_key" in caplog.text
@@ -798,7 +800,9 @@ class TestEvaluateExpressions:
 
         import logging
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(
+            logging.DEBUG, logger="psPlotKit.data_manager.ps_data_manager"
+        ):
             data_manager.load_data()
 
         assert (
@@ -970,6 +974,58 @@ class TestEvaluateExpressions:
         dm.register_expression(ek.a + ek.b, return_key="sum_ab")
         # And nothing should be evaluated
         assert len(dm) == 0
+
+    def test_dimensionless_plus_dimensional(self):
+        """Dimensionless data mixed with dimensional should not raise a
+        unit-conversion error and should preserve the dimensional units."""
+        dm = PsDataManager()
+        dm.add_data("d", "recovery", [0.5, 0.6, 0.7])  # dimensionless
+        dm.add_data("d", "cost", [10.0, 20.0, 30.0], units="USD/m**3")
+
+        ek = dm.get_expression_keys()
+        dm.register_expression(ek.cost * ek.recovery, return_key="weighted_cost")
+
+        result = dm.get_data("d", "weighted_cost")
+        np.testing.assert_array_almost_equal(result.data, [5.0, 12.0, 21.0])
+        assert "USD" in result.sunits
+
+    def test_dimensionless_add_dimensional(self):
+        """Adding dimensionless to dimensional should preserve units."""
+        dm = PsDataManager()
+        dm.add_data("d", "offset", [1.0, 2.0])  # dimensionless
+        dm.add_data("d", "cost", [10.0, 20.0], units="USD/m**3")
+
+        ek = dm.get_expression_keys()
+        dm.register_expression(ek.cost + ek.offset, return_key="adjusted")
+
+        result = dm.get_data("d", "adjusted")
+        np.testing.assert_array_almost_equal(result.data, [11.0, 22.0])
+        assert "USD" in result.sunits
+
+    def test_dimensionless_sub_dimensional(self):
+        """Subtracting dimensionless from dimensional should preserve units."""
+        dm = PsDataManager()
+        dm.add_data("d", "penalty", [1.0, 2.0])  # dimensionless
+        dm.add_data("d", "cost", [10.0, 20.0], units="USD/m**3")
+
+        ek = dm.get_expression_keys()
+        dm.register_expression(ek.cost - ek.penalty, return_key="net")
+
+        result = dm.get_data("d", "net")
+        np.testing.assert_array_almost_equal(result.data, [9.0, 18.0])
+        assert "USD" in result.sunits
+
+    def test_two_dimensionless(self):
+        """Two dimensionless datasets should work fine together."""
+        dm = PsDataManager()
+        dm.add_data("d", "a", [1.0, 2.0])
+        dm.add_data("d", "b", [3.0, 4.0])
+
+        ek = dm.get_expression_keys()
+        dm.register_expression(ek.a + ek.b, return_key="sum_ab")
+
+        result = dm.get_data("d", "sum_ab")
+        np.testing.assert_array_almost_equal(result.data, [4.0, 6.0])
 
 
 # ---------- add_data auto-wrapping ----------
