@@ -1,3 +1,4 @@
+import os
 import csv
 import yaml
 import matplotlib
@@ -2193,12 +2194,12 @@ class FigureGenerator:
             self.file_name = file_name
         if figure_description is not None:
             self.figure_description = None
-        self.save_fig(self.save_location + "\\" + self.file_name)
+        self.save_fig(os.path.join(self.save_location, self.file_name))
         should_save = save_data if save_data is not None else self.save_data
         if should_save and self.data_storage is not None:
-            self.data_storage.save(self.save_location + "\\" + self.file_name)
+            self.data_storage.save(os.path.join(self.save_location, self.file_name))
         if data is not None:
-            self.save_csv(self.save_location + "\\" + self.file_name, data)
+            self.save_csv(os.path.join(self.save_location, self.file_name), data)
 
     def show(self):
         """Display the figure in an interactive window."""
