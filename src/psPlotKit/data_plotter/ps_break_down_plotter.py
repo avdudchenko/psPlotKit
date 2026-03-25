@@ -20,6 +20,7 @@ class BreakDownPlotter:
         save_folder=None,
         save_name=None,
         show_fig=True,
+        fig=None,
     ):
 
         self.save_location = create_save_location(save_location, save_folder)
@@ -36,6 +37,9 @@ class BreakDownPlotter:
         self.save_name = save_name
         self.hatch_groups = {}
         self.area_groups = {}
+        if fig is not None and not isinstance(fig, FigureGenerator):
+            raise ValueError("fig must be a FigureGenerator object")
+        self.fig = fig
 
     def _select_data(self, xkeys, ykeys):
         self.PsData.select_data(xkeys, require_all_in_dir=False)
@@ -229,7 +233,8 @@ class BreakDownPlotter:
         generate_figure=True,
         legend_loc="upper left",
         legend_cols=2,
-        fig_options={},
+        # fig_options={},
+        ax_idx=0,
     ):
 
         self._select_data(xdata, ydata)
@@ -238,7 +243,7 @@ class BreakDownPlotter:
         self.generate_groups_lines = self._get_group_options(
             self.selected_data.keys(), xdata, ydata
         )
-        self.fig_options = fig_options
+        # self.fig_options = fig_options
         self.index = 0
         if axis_options is None:
             self.axis_options = {}
@@ -247,28 +252,28 @@ class BreakDownPlotter:
         if self.axis_options.get("xlabel") == None:
             self.axis_options["xlabel"] = self._get_axis_label(
                 self.xdata_label, self.xunit
-            )  # all lines shold share units
+            )  # all lines should share units
         if self.axis_options.get("ylabel") == None:
             self.axis_options["ylabel"] = self._get_axis_label(
                 self.ydata_label, self.yunit
-            )  # all lines shold share units
+            )  # all lines should share units
 
-        self.plot_imported_data()
+        self.plot_imported_data(ax_idx=ax_idx)
 
-        if (
-            generate_figure
-        ):  # TODO: other plotters call this generate_plot, should make this consistent
-            self.generate_figure(loc=legend_loc, cols=legend_cols)
+        # if (
+        #     generate_figure
+        # ):  # TODO: other plotters call this generate_plot, should make this consistent
+        #     self.generate_figure(loc=legend_loc, cols=legend_cols)
 
-    def plot_imported_data(self):
-        if "fig_object" in self.fig_options:
-            self.fig = self.fig_options.get("fig_object")
-        else:
-            self.fig = FigureGenerator()
-            self.fig.init_figure(**self.fig_options)
+    def plot_imported_data(self, ax_idx=0):
+        # if "fig_object" in self.fig_options:
+        #     self.fig = self.fig_options.get("fig_object")
+        # else:
+        #     self.fig = FigureGenerator()
+        #     self.fig.init_figure(**self.fig_options)
         plotted_legend = []
         for group, items in self.hatch_groups.items():
-            self.fig.plot_area([], [], **items)
+            self.fig.plot_area([], [], ax_idx=ax_idx, **items)
         old_data = 0
         current_data = None
 
@@ -284,14 +289,16 @@ class BreakDownPlotter:
             else:
                 current_data = line["ydata"] + old_data
             line["ydata"] = current_data
-            if "ax_idx" in self.fig_options:
-                line["ax_idx"] = self.fig_options.get("ax_idx")
-            self.fig.plot_area(**line)
+            # if "ax_idx" in self.fig_options:
+            #     line["ax_idx"] = self.fig_options.get("ax_idx")
+            self.fig.plot_area(ax_idx=ax_idx, **line)
             old_data = line["ydata"]
+        
+        self.fig.set_axis(**self.axis_options)
 
     def generate_figure(self, loc="upper left", cols=2):
-        if "ax_idx" in self.fig_options:
-            self.axis_options["ax_idx"] = self.fig_options["ax_idx"]
+        # if "ax_idx" in self.fig_options:
+        #     self.axis_options["ax_idx"] = self.fig_options["ax_idx"]
         self.fig.set_axis(**self.axis_options)
         self.fig.add_legend(loc=loc, ncol=cols)
 
