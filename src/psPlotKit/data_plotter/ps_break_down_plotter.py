@@ -15,20 +15,22 @@ _logger = logger.define_logger(__name__, "BreakDownPlotter", level="INFO")
 class BreakDownPlotter:
     def __init__(
         self,
-        PsData,
+        PsData=None,
         save_location=None,
         save_folder=None,
         save_name=None,
         show_fig=True,
         fig=None,
+        line_indexes={},
+        line_color_list=None,
+        color_dict=None,
     ):
 
         self.save_location = create_save_location(save_location, save_folder)
         self.show_fig = show_fig
         self.select_data_key_list = []
         self.PsData = PsData
-        self.define_plot_styles()
-        self.line_indexes = {}
+        self.define_plot_styles(line_color_list=line_color_list)
         self.line_groups = None
         self.xunit = None
         self.yunit = None
@@ -40,6 +42,7 @@ class BreakDownPlotter:
         if fig is not None and not isinstance(fig, FigureGenerator):
             raise ValueError("fig must be a FigureGenerator object")
         self.fig = fig
+        self.color_dict = color_dict
 
     def _select_data(self, xkeys, ykeys):
         self.PsData.select_data(xkeys, require_all_in_dir=False)
@@ -52,6 +55,7 @@ class BreakDownPlotter:
         self.area_groups = groups
 
     def _get_color(self, label):
+        
         if isinstance(self.line_colors, dict):
             return self.line_colors[label]
         else:
@@ -152,7 +156,11 @@ class BreakDownPlotter:
             opts = None
             key = None
             color = None
+            if skey in self.color_dict.keys():
+                color = self.color_dict[skey]
             for i, key in enumerate(self.hatch_groups):
+                # First try to get plotting options based on skey
+                # provided directly in hatch_groups
                 if key in str(skey):
                     opts = self.hatch_groups[key]
                     if opts.get("label") == None:
@@ -165,17 +173,23 @@ class BreakDownPlotter:
                     self.hatch_groups[key] = copy.deepcopy(opts)
                     # if key not in self.line_indexes:
                     #     self.line_indexes[key] = {"idx": 0, "auto": True}
+
+            # Then check if there are options based on akey
             for akey in self.area_groups:
                 _label = None
                 if isinstance(akey, dict):
                     akey, item = list(akey.items())[0]
                     if isinstance(item, dict):
+                        # if True, the structure of area_groups is a list of dicts with one key?
                         if "label" in item:
                             _label = item["label"]
                         if "color" in item:
                             color = item["color"]
                     else:
                         _label = item
+                
+                if akey in self.color_dict.keys():
+                    color = self.color_dict[akey]
                 if self.check_key_in_dir(skey, akey):
                     if _label is None:
                         _label = akey
@@ -199,12 +213,14 @@ class BreakDownPlotter:
                             cur_line[key] = val
 
                     if self.hatch_groups != {}:
+                        # If hatch_groups is not an empty dict
                         for h_key in self.hatch_groups:
-                            # print("ss", h_key, akey, skey)
                             if h_key in str(skey):
+                                # print("ss", h_key, akey, skey)
 
                                 _label = tuple([h_key, akey])
                                 plot_label.replace(h_key, "")
+                                # Then we are looking for a color based on h_key
                                 if color is None:
                                     color = self._get_color(h_key)
                                 cur_line["color"] = color
@@ -230,17 +246,17 @@ class BreakDownPlotter:
         xdata,
         ydata,
         axis_options=None,
-        generate_figure=True,
-        legend_loc="upper left",
-        legend_cols=2,
+        # generate_figure=True,
+        # legend_loc="upper left",
+        # legend_cols=2,
         # fig_options={},
         ax_idx=0,
     ):
 
         self._select_data(xdata, ydata)
         self.selected_data = self.PsData.get_selected_data()
-        self.selected_data.display()
-        self.generate_groups_lines = self._get_group_options(
+        # self.selected_data.display()
+        self._get_group_options(
             self.selected_data.keys(), xdata, ydata
         )
         # self.fig_options = fig_options
@@ -276,7 +292,6 @@ class BreakDownPlotter:
             self.fig.plot_area([], [], ax_idx=ax_idx, **items)
         old_data = 0
         current_data = None
-
         for linelabel in self.plot_order:
             line = self.plot_areas[linelabel]
             if line.get("label") in plotted_legend:
@@ -310,6 +325,8 @@ class BreakDownPlotter:
 
         self.fig.close()
 
+    def set_selected_data(self, data):
+        self.PsData = data
 
 class breakDownPlotter(BreakDownPlotter):
     _logger.warning("breakDownPlotter is deprecated, please use BreakDownPlotter")
