@@ -246,20 +246,24 @@ class BreakDownPlotter:
         xdata,
         ydata,
         axis_options=None,
-        # generate_figure=True,
-        # legend_loc="upper left",
-        # legend_cols=2,
-        # fig_options={},
-        ax_idx=0,
+        generate_plot=False,
+        legend_loc="upper left",
+        legend_cols=2,
+        fig_options={},
+        ax_idx=None,
+        **kwargs
     ):
+
+        if ax_idx is None:
+            ax_idx = 0
+        self.fig_options = fig_options
+        self.fig_options["ax_idx"] = ax_idx
 
         self._select_data(xdata, ydata)
         self.selected_data = self.PsData.get_selected_data()
-        # self.selected_data.display()
         self._get_group_options(
             self.selected_data.keys(), xdata, ydata
         )
-        # self.fig_options = fig_options
         self.index = 0
         if axis_options is None:
             self.axis_options = {}
@@ -276,10 +280,9 @@ class BreakDownPlotter:
 
         self.plot_imported_data(ax_idx=ax_idx)
 
-        # if (
-        #     generate_figure
-        # ):  # TODO: other plotters call this generate_plot, should make this consistent
-        #     self.generate_figure(loc=legend_loc, cols=legend_cols)
+        # TODO: other plotters call this generate_plot, should make this consistent
+        if generate_plot:  
+            self.generate_plot(ax_idx=ax_idx, loc=legend_loc, cols=legend_cols)
 
     def plot_imported_data(self, ax_idx=0):
         # if "fig_object" in self.fig_options:
@@ -304,17 +307,13 @@ class BreakDownPlotter:
             else:
                 current_data = line["ydata"] + old_data
             line["ydata"] = current_data
-            # if "ax_idx" in self.fig_options:
-            #     line["ax_idx"] = self.fig_options.get("ax_idx")
             self.fig.plot_area(ax_idx=ax_idx, **line)
             old_data = line["ydata"]
         
-        self.fig.set_axis(**self.axis_options)
+        self.fig.set_axis(ax_idx=ax_idx, **self.axis_options)
 
-    def generate_figure(self, loc="upper left", cols=2):
-        # if "ax_idx" in self.fig_options:
-        #     self.axis_options["ax_idx"] = self.fig_options["ax_idx"]
-        self.fig.set_axis(**self.axis_options)
+    def generate_plot(self, ax_idx=0, loc="upper left", cols=2):
+        self.fig.set_axis(ax_idx=ax_idx, **self.axis_options)
         self.fig.add_legend(loc=loc, ncol=cols)
 
         if self.save_name is not None:
