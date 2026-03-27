@@ -223,39 +223,45 @@ class PsData:
         if units is None or units == "-":
             return "dimensionless"
         if "isotime" in units:
-            units = "min"
             _logger.info("Imported ISO time - converted to epoch time in min")
             self._convert_iso_to_epoch = True
-        if "USD" in units:
-            uf = units.split("/")
-            for i, u in enumerate(uf):
-                if "USD" in u:
-                    uf[i] = "USD"
-            units = "/".join(uf)
-            _logger.debug("converted USD orig: {}, final {}".format(uf, units))
-        if "USD/a" in units:
-            units = "USD/year"
-            _logger.debug("converted USD orig: {}, final {}".format(uf, units))
+            return "min"
 
-        if "1/a" in units:
-            units = "1/year"
-            _logger.debug("converted 1/a to 1/year")
-        if "PSI" in units:
-            units = units.replace("PSI", "psi")
-            _logger.debug("converted gal to gallon")
-        if "gal" in units:
-            units = units.replace("gal", "US_liquid_gallon")
-            _logger.debug("converted gal to gallon")
-        if "gpm" in units:
-            units = units.replace("gpm", "US_liquid_gallon/min")
-            _logger.debug("converted gal to gallon")
-        if "°C" in units:
-            units = units.replace(" °C", "*degC")
-            _logger.debug("converted C to degC")
-        if "liter" in units:
-            units = units.replace("liter", "L")
-        if "sec" in units:
-            units = units.replace("sec", "s")
+        # Regex-based token replacements.  Each pattern uses look-behind
+        # and look-ahead so that only *whole* unit tokens are matched —
+        # the token must be bounded by start/end of string or by one of
+        # the unit-separator characters: /  *  **
+        #
+        # (?<![A-Za-z0-9_]) — not preceded by an alphanumeric or _
+        # (?![A-Za-z0-9_])  — not followed  by an alphanumeric or _
+
+        _LB = r"(?<![A-Za-z0-9_])"  # look-behind boundary
+        _LA = r"(?![A-Za-z0-9_])"  # look-ahead  boundary
+
+        # USD_XXXX variants → USD  (e.g. USD_2018, USD_2020)
+        units = re.sub(_LB + r"USD(?:_\w+)?" + _LA, "USD", units)
+
+        # "a" meaning year — only when it stands alone as a unit token
+        units = re.sub(_LB + r"a" + _LA, "year", units)
+
+        # PSI → psi
+        units = re.sub(_LB + r"PSI" + _LA, "psi", units)
+
+        # gpm → US_liquid_gallon/min  (before gal, since gpm contains "gal")
+        units = re.sub(_LB + r"gpm" + _LA, "US_liquid_gallon/min", units)
+
+        # gal → US_liquid_gallon (whole-token only, won't match "gallon")
+        units = re.sub(_LB + r"gal" + _LA, "US_liquid_gallon", units)
+
+        # °C → *degC
+        units = units.replace(" °C", "*degC").replace("°C", "degC")
+
+        # liter → L (whole-token)
+        units = re.sub(_LB + r"liter" + _LA, "L", units)
+
+        # sec → s (whole-token only, won't match "second")
+        units = re.sub(_LB + r"sec" + _LA, "s", units)
+
         return units
 
     def set_data(self, data):
