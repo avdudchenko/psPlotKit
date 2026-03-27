@@ -55,7 +55,7 @@ class BreakDownPlotter:
         self.area_groups = groups
 
     def _get_color(self, label):
-        
+
         if isinstance(self.line_colors, dict):
             return self.line_colors[label]
         else:
@@ -187,7 +187,7 @@ class BreakDownPlotter:
                             color = item["color"]
                     else:
                         _label = item
-                
+
                 if akey in self.color_dict.keys():
                     color = self.color_dict[akey]
                 if self.check_key_in_dir(skey, akey):
@@ -326,6 +326,7 @@ class BreakDownPlotter:
 
     def set_selected_data(self, data):
         self.PsData = data
+
 
 class breakDownPlotter(BreakDownPlotter):
     _logger.warning("breakDownPlotter is deprecated, please use BreakDownPlotter")
