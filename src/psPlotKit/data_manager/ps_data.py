@@ -234,7 +234,7 @@ class PsData:
         #
         # (?<![A-Za-z0-9_]) — not preceded by an alphanumeric or _
         # (?![A-Za-z0-9_])  — not followed  by an alphanumeric or _
-
+        _u = units
         _LB = r"(?<![A-Za-z0-9_])"  # look-behind boundary
         _LA = r"(?![A-Za-z0-9_])"  # look-ahead  boundary
 
@@ -261,7 +261,7 @@ class PsData:
 
         # sec → s (whole-token only, won't match "second")
         units = re.sub(_LB + r"sec" + _LA, "s", units)
-
+        # print("units after conversion: {} -> {}".format(_u, units))
         return units
 
     def set_data(self, data):

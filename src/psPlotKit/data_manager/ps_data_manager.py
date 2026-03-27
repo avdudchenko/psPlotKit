@@ -1157,7 +1157,29 @@ class PsDataManager(dict):
                 #         )
                 #         continue
 
-                # Wrap the result in a PsData
+                # Wrap the result in a PsData.  When zero-filled data is
+                # involved the computed units may be nonsensical (e.g.
+                # dimensionless 0 * USD/kWh → USD/kWh instead of USD/yr),
+                # so try the proper units conversion first and only fall
+                # back to assign_units if it actually fails.
+                _effective_units = units
+                _effective_assign = assign_units
+                if has_zero_fill and units is not None:
+                    try:
+                        # Probe whether the conversion is dimensionally valid
+                        _probe = (
+                            result_quantity
+                            if hasattr(result_quantity, "rescale")
+                            else None
+                        )
+                        if _probe is not None:
+                            _probe.rescale(
+                                PsData.__new__(PsData)._convert_string_unit(units)
+                            )
+                    except Exception:
+                        # Dimensions don't match — fall back to labelling only
+                        _effective_units = None
+                        _effective_assign = units
                 result = PsData(
                     data_key=return_key,
                     data_type="zero_fill" if has_zero_fill else "expression_result",
@@ -1166,8 +1188,8 @@ class PsDataManager(dict):
                         if hasattr(result_quantity, "magnitude")
                         else np.atleast_1d(np.asarray(result_quantity))
                     ),
-                    assign_units=assign_units,
-                    units=units,
+                    assign_units=_effective_assign,
+                    units=_effective_units,
                 )
                 result.data_key = return_key
                 result.data_label = return_key
