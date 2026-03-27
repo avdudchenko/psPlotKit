@@ -277,6 +277,7 @@ class PsCostingPackage:
         self._formulae = []
         self._flow_costs = {}  # flow_type → {"cost_parameter": name}
         self._validations = []
+        self._fractions = []
 
     def add_parameter(
         self,
@@ -406,6 +407,32 @@ class PsCostingPackage:
         """Return the registered validations (read-only view)."""
         return list(self._validations)
 
+    def register_fraction(self, fraction_key, total_key=None):
+        """Register a fractional cost contribution to compute.
+
+        For each group, the costing pipeline will produce
+        ``("costing", group_name, "{fraction_key}_fraction")`` =
+        ``("costing", group_name, fraction_key)`` /
+        ``("costing", "total", total_key)``.
+
+        Args:
+            fraction_key: The per-group formula return key to use as
+                the numerator (e.g. ``"LCOW"`` or ``"LCOW_opex"``).
+            total_key: The formula return key for the denominator
+                total.  Defaults to *fraction_key* if not given.  Use
+                this when the numerator is a sub-component and the
+                denominator is a different aggregate (e.g.
+                ``fraction_key="LCOW_opex", total_key="LCOW"``).
+        """
+        if total_key is None:
+            total_key = fraction_key
+        self._fractions.append({"fraction_key": fraction_key, "total_key": total_key})
+
+    @property
+    def fractions(self):
+        """Return the registered fraction definitions (read-only view)."""
+        return list(self._fractions)
+
     @property
     def flow_costs(self):
         """Return the registered flow-cost definitions (read-only view)."""
@@ -491,6 +518,7 @@ class PsCostingManager:
         self._build_formula_expressions()
         self._build_per_group_formula_expressions()
         self._build_total_formula_expressions()
+        self._build_fraction_expressions()
 
         self.data_manager.evaluate_expressions()
 
@@ -1075,6 +1103,51 @@ class PsCostingManager:
                 zero_if_missing=True,
             )
             _logger.info("Expression '{}' = sum of {}.".format(total_rk, group_rks))
+
+    def _build_fraction_expressions(self):
+        """Build fractional cost contribution expressions for each group.
+
+        Only fractions explicitly registered via
+        :meth:`PsCostingPackage.register_fraction` are built.  For each
+        registered fraction and each group, registers:
+
+        ``("costing", group_name, "{fraction_key}_fraction")`` =
+        ``("costing", group_name, fraction_key)`` /
+        ``("costing", "total", total_key)``
+        """
+        for frac_def in self.costing_package.fractions:
+            fraction_key = frac_def["fraction_key"]
+            total_key = frac_def["total_key"]
+
+            group_rks = self._per_group_formula_keys.get(fraction_key, [])
+            if not group_rks:
+                _logger.warning(
+                    "No per-group keys found for fraction_key '{}' — "
+                    "skipping.".format(fraction_key)
+                )
+                continue
+
+            total_rk = ("costing", "total", total_key)
+
+            for group_rk in group_rks:
+                # group_rk is ("costing", group_name, fraction_key)
+                fraction_rk = (
+                    group_rk[0],
+                    group_rk[1],
+                    "{}_fraction".format(fraction_key),
+                )
+                ek = self.data_manager.get_expression_keys()
+                expr = ek[group_rk] / ek[total_rk]
+                self.data_manager.register_expression(
+                    expr,
+                    return_key=fraction_rk,
+                    zero_if_missing=True,
+                )
+                _logger.info(
+                    "Expression '{}' = '{}' / '{}'.".format(
+                        fraction_rk, group_rk, total_rk
+                    )
+                )
 
     # ------------------------------------------------------------------
     # validation

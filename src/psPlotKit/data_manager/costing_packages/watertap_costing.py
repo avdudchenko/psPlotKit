@@ -38,6 +38,9 @@ class WaterTapCostingPackage(PsCostingPackage):
             + ek.total_operating_cost,
         )
         self.add_validation("LCOW", file_key=validation_key, rtol=1e-4)
+        self.register_fraction("LCOW")
+        self.register_fraction("LCOW_opex", "LCOW")
+        self.register_fraction("LCOW_capex", "LCOW")
 
     def register_product_flow(
         self, file_key="fs.product.properties[0.0].flow_vol_phase[Liq]"

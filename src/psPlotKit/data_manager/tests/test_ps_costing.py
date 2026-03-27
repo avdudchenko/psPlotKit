@@ -1069,3 +1069,131 @@ class TestPsCostingManagerSynthetic:
         dm.evaluate_expressions()
 
         assert cm._validate(error_on_failure=False) is False
+
+    def test_fraction_expressions(self):
+        """Fraction expressions should give each group's share of the total."""
+        dm = PsDataManager()
+        dm.add_data("d", "ro_cap", [100.0, 200.0])
+        dm.add_data("d", "pump_cap", [50.0, 60.0])
+        dm.add_data("d", ("costing", "crf"), [0.1, 0.1])
+        dm.add_data("d", ("costing", "product_flow"), [1000.0, 1000.0])
+
+        pkg = PsCostingPackage()
+        pkg.add_parameter("crf", file_key="dummy")
+        pkg.add_parameter("product_flow", file_key="dummy")
+        pkg.add_formula(
+            "annualized_capex",
+            lambda ek: ek.aggregate_capital_cost * ek.crf,
+        )
+        pkg.add_formula(
+            "LCOW",
+            lambda ek: ek.annualized_capex / ek.product_flow,
+        )
+        # Only register LCOW fraction — annualized_capex should NOT get one
+        pkg.register_fraction("LCOW")
+
+        ro = PsCostingGroup("RO")
+        pumps = PsCostingGroup("Pumps")
+        cm = PsCostingManager(dm, pkg, [ro, pumps])
+        cm._group_capex_keys = {"RO": ["ro_cap"], "Pumps": ["pump_cap"]}
+        cm._group_fixed_opex_keys = {"RO": [], "Pumps": []}
+        cm._group_flow_type_keys = {"RO": {}, "Pumps": {}}
+
+        cm._build_group_expressions()
+        cm._build_flow_expressions()
+        cm._build_per_group_flow_expressions()
+        cm._build_formula_expressions()
+        cm._build_per_group_formula_expressions()
+        cm._build_total_formula_expressions()
+        cm._build_fraction_expressions()
+        dm.evaluate_expressions()
+
+        # LCOW fractions
+        # RO LCOW = 0.01, 0.02; Pumps LCOW = 0.005, 0.006
+        # Total LCOW = 0.015, 0.026
+        ro_lcow_frac = dm.get_data("d", ("costing", "RO", "LCOW_fraction"))
+        np.testing.assert_array_almost_equal(
+            ro_lcow_frac.data, [10.0 / 15.0, 20.0 / 26.0]
+        )
+        pump_lcow_frac = dm.get_data("d", ("costing", "Pumps", "LCOW_fraction"))
+        np.testing.assert_array_almost_equal(
+            pump_lcow_frac.data, [5.0 / 15.0, 6.0 / 26.0]
+        )
+
+        # Fractions should sum to 1.0
+        np.testing.assert_array_almost_equal(
+            np.asarray(ro_lcow_frac.data) + np.asarray(pump_lcow_frac.data),
+            [1.0, 1.0],
+        )
+
+        # annualized_capex_fraction should NOT exist (not registered)
+        with pytest.raises(KeyError):
+            dm.get_data("d", ("costing", "RO", "annualized_capex_fraction"))
+
+    def test_fraction_with_custom_total_key(self):
+        """register_fraction with a different total_key uses that as denominator."""
+        dm = PsDataManager()
+        dm.add_data("d", "ro_cap", [100.0, 200.0])
+        dm.add_data("d", "pump_cap", [50.0, 60.0])
+        dm.add_data("d", "ro_opex", [30.0, 40.0])
+        dm.add_data("d", "pump_opex", [20.0, 30.0])
+        dm.add_data("d", ("costing", "crf"), [0.1, 0.1])
+        dm.add_data("d", ("costing", "product_flow"), [1000.0, 1000.0])
+
+        pkg = PsCostingPackage()
+        pkg.add_parameter("crf", file_key="dummy")
+        pkg.add_parameter("product_flow", file_key="dummy")
+        pkg.add_formula(
+            "LCOW_capex",
+            lambda ek: ek.aggregate_capital_cost * ek.crf / ek.product_flow,
+        )
+        pkg.add_formula(
+            "LCOW_opex",
+            lambda ek: ek.aggregate_fixed_operating_cost / ek.product_flow,
+        )
+        pkg.add_formula(
+            "LCOW",
+            lambda ek: ek.LCOW_capex + ek.LCOW_opex,
+        )
+        # Fraction of LCOW_capex relative to total LCOW (not total LCOW_capex)
+        pkg.register_fraction("LCOW_capex", total_key="LCOW")
+        pkg.register_fraction("LCOW_opex", total_key="LCOW")
+
+        ro = PsCostingGroup("RO")
+        pumps = PsCostingGroup("Pumps")
+        cm = PsCostingManager(dm, pkg, [ro, pumps])
+        cm._group_capex_keys = {"RO": ["ro_cap"], "Pumps": ["pump_cap"]}
+        cm._group_fixed_opex_keys = {"RO": ["ro_opex"], "Pumps": ["pump_opex"]}
+        cm._group_flow_type_keys = {"RO": {}, "Pumps": {}}
+
+        cm._build_group_expressions()
+        cm._build_flow_expressions()
+        cm._build_per_group_flow_expressions()
+        cm._build_formula_expressions()
+        cm._build_per_group_formula_expressions()
+        cm._build_total_formula_expressions()
+        cm._build_fraction_expressions()
+        dm.evaluate_expressions()
+
+        # RO: capex=100, opex=30; Pumps: capex=50, opex=20
+        # RO LCOW_capex = 100*0.1/1000 = 0.01
+        # Pumps LCOW_capex = 50*0.1/1000 = 0.005
+        # RO LCOW_opex = 30/1000 = 0.03
+        # Pumps LCOW_opex = 20/1000 = 0.02
+        # Total LCOW = (0.01+0.005) + (0.03+0.02) = 0.065
+        total_lcow = np.asarray(dm.get_data("d", ("costing", "total", "LCOW")).data)
+        np.testing.assert_array_almost_equal(total_lcow[:1], [0.065])
+
+        # RO LCOW_capex_fraction = 0.01 / 0.065
+        ro_capex_frac = dm.get_data("d", ("costing", "RO", "LCOW_capex_fraction"))
+        np.testing.assert_array_almost_equal(ro_capex_frac.data[:1], [0.01 / 0.065])
+
+        # All four fractions should sum to 1.0
+        fracs = [
+            dm.get_data("d", ("costing", "RO", "LCOW_capex_fraction")),
+            dm.get_data("d", ("costing", "Pumps", "LCOW_capex_fraction")),
+            dm.get_data("d", ("costing", "RO", "LCOW_opex_fraction")),
+            dm.get_data("d", ("costing", "Pumps", "LCOW_opex_fraction")),
+        ]
+        total = sum(np.asarray(f.data) for f in fracs)
+        np.testing.assert_array_almost_equal(total, [1.0, 1.0])
