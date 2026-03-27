@@ -55,7 +55,7 @@ class BreakDownPlotter:
         self.area_groups = groups
 
     def _get_color(self, label):
-        
+
         if isinstance(self.line_colors, dict):
             return self.line_colors[label]
         else:
@@ -187,7 +187,7 @@ class BreakDownPlotter:
                             color = item["color"]
                     else:
                         _label = item
-                
+
                 if akey in self.color_dict.keys():
                     color = self.color_dict[akey]
                 if self.check_key_in_dir(skey, akey):
@@ -256,9 +256,7 @@ class BreakDownPlotter:
         self._select_data(xdata, ydata)
         self.selected_data = self.PsData.get_selected_data()
         # self.selected_data.display()
-        self._get_group_options(
-            self.selected_data.keys(), xdata, ydata
-        )
+        self._get_group_options(self.selected_data.keys(), xdata, ydata)
         # self.fig_options = fig_options
         self.index = 0
         if axis_options is None:
@@ -308,7 +306,7 @@ class BreakDownPlotter:
             #     line["ax_idx"] = self.fig_options.get("ax_idx")
             self.fig.plot_area(ax_idx=ax_idx, **line)
             old_data = line["ydata"]
-        
+
         self.fig.set_axis(**self.axis_options)
 
     def generate_figure(self, loc="upper left", cols=2):
@@ -327,6 +325,7 @@ class BreakDownPlotter:
 
     def set_selected_data(self, data):
         self.PsData = data
+
 
 class breakDownPlotter(BreakDownPlotter):
     _logger.warning("breakDownPlotter is deprecated, please use BreakDownPlotter")
