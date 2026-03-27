@@ -1141,6 +1141,7 @@ class PsCostingManager:
                 self.data_manager.register_expression(
                     expr,
                     return_key=fraction_rk,
+                    units="%",
                     zero_if_missing=True,
                 )
                 _logger.info(

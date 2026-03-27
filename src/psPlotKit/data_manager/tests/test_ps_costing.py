@@ -1108,22 +1108,22 @@ class TestPsCostingManagerSynthetic:
         cm._build_fraction_expressions()
         dm.evaluate_expressions()
 
-        # LCOW fractions
+        # LCOW fractions (stored as percentages)
         # RO LCOW = 0.01, 0.02; Pumps LCOW = 0.005, 0.006
         # Total LCOW = 0.015, 0.026
         ro_lcow_frac = dm.get_data("d", ("costing", "RO", "LCOW_fraction"))
         np.testing.assert_array_almost_equal(
-            ro_lcow_frac.data, [10.0 / 15.0, 20.0 / 26.0]
+            ro_lcow_frac.data, [10.0 / 15.0 * 100, 20.0 / 26.0 * 100]
         )
         pump_lcow_frac = dm.get_data("d", ("costing", "Pumps", "LCOW_fraction"))
         np.testing.assert_array_almost_equal(
-            pump_lcow_frac.data, [5.0 / 15.0, 6.0 / 26.0]
+            pump_lcow_frac.data, [5.0 / 15.0 * 100, 6.0 / 26.0 * 100]
         )
 
-        # Fractions should sum to 1.0
+        # Fractions should sum to 100%
         np.testing.assert_array_almost_equal(
             np.asarray(ro_lcow_frac.data) + np.asarray(pump_lcow_frac.data),
-            [1.0, 1.0],
+            [100.0, 100.0],
         )
 
         # annualized_capex_fraction should NOT exist (not registered)
@@ -1184,11 +1184,13 @@ class TestPsCostingManagerSynthetic:
         total_lcow = np.asarray(dm.get_data("d", ("costing", "total", "LCOW")).data)
         np.testing.assert_array_almost_equal(total_lcow[:1], [0.065])
 
-        # RO LCOW_capex_fraction = 0.01 / 0.065
+        # RO LCOW_capex_fraction = 0.01 / 0.065 * 100
         ro_capex_frac = dm.get_data("d", ("costing", "RO", "LCOW_capex_fraction"))
-        np.testing.assert_array_almost_equal(ro_capex_frac.data[:1], [0.01 / 0.065])
+        np.testing.assert_array_almost_equal(
+            ro_capex_frac.data[:1], [0.01 / 0.065 * 100]
+        )
 
-        # All four fractions should sum to 1.0
+        # All four fractions should sum to 100%
         fracs = [
             dm.get_data("d", ("costing", "RO", "LCOW_capex_fraction")),
             dm.get_data("d", ("costing", "Pumps", "LCOW_capex_fraction")),
@@ -1196,4 +1198,4 @@ class TestPsCostingManagerSynthetic:
             dm.get_data("d", ("costing", "Pumps", "LCOW_opex_fraction")),
         ]
         total = sum(np.asarray(f.data) for f in fracs)
-        np.testing.assert_array_almost_equal(total, [1.0, 1.0])
+        np.testing.assert_array_almost_equal(total, [100.0, 100.0])
