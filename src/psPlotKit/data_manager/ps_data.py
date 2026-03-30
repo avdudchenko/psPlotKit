@@ -14,8 +14,15 @@ import datetime
 class CustomUnits:
     def __init__(self):
         self.USD = qs.UnitQuantity("USD")
+        self.kUSD = qs.UnitQuantity("kUSD", 1000 * self.USD, symbol="kUSD")
+        self.MUSD = qs.UnitQuantity("MUSD", 1e6 * self.USD, symbol="MUSD")
         self.PPM = qs.UnitQuantity("PPM", qs.g / qs.m**3, symbol="PPM")
-        self.custom_units = {"USD": self.USD, "PPM": self.PPM}
+        self.custom_units = {
+            "USD": self.USD,
+            "kUSD": self.kUSD,
+            "MUSD": self.MUSD,
+            "PPM": self.PPM,
+        }
 
     def get_units_dict(self):
         return self.custom_units
@@ -199,8 +206,12 @@ class PsData:
                 if "**" in u:
                     u_t = u.replace("**", "^")
                     uf[i] = "${}$".format(u_t)
-                if "USD" in u:
+                if u == "USD":
                     uf[i] = "$\$$"
+                elif u == "kUSD":
+                    uf[i] = "k$\$$"
+                elif u == "MUSD":
+                    uf[i] = "M$\$$"
 
             units = "/".join(uf)
         if "dimensionless" in self.sunits:

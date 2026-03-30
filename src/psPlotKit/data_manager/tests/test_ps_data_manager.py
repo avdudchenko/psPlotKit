@@ -766,12 +766,15 @@ class TestEvaluateExpressions:
         np.testing.assert_array_almost_equal(result.data, expected)
 
     def test_missing_key_warns_and_skips(self, data_manager, caplog):
-        """If a key in the expression doesn't exist in a directory,
-        a debug message should be logged and that directory skipped."""
+        """With zero_if_missing=True (default), a missing key is filled with
+        zero and a debug message is logged.  When zero_if_missing=False the
+        directory is skipped instead."""
         data_manager.register_data_key("LCOW", "LCOW")
         ek = data_manager.get_expression_keys()
         # Manually build an expression that references a non-existent key
         nonexistent = ExpressionNode._key_node("nonexistent_key")
+
+        # --- default (zero_if_missing=True): missing key filled with zero ---
         data_manager.register_expression(ek.LCOW + nonexistent, return_key="bad_expr")
 
         import logging
@@ -783,32 +786,67 @@ class TestEvaluateExpressions:
 
         assert "nonexistent_key" in caplog.text
         assert (
-            "skipping" in caplog.text.lower() or "could not find" in caplog.text.lower()
+            "filled missing key" in caplog.text.lower() or "zero" in caplog.text.lower()
         )
 
-        # Should not have produced any results
+        # Results should be produced (missing key treated as zero)
         result_keys = [k for k in data_manager.keys() if "bad_expr" in str(k)]
-        assert len(result_keys) == 0
+        assert len(result_keys) > 0
+
+        # --- explicit zero_if_missing=False: directory is skipped ---
+        caplog.clear()
+        data_manager.register_expression(
+            ek.LCOW + nonexistent,
+            return_key="bad_expr_skip",
+            zero_if_missing=False,
+        )
+        with caplog.at_level(
+            logging.DEBUG, logger="psPlotKit.data_manager.ps_data_manager"
+        ):
+            data_manager.evaluate_expressions()
+
+        skip_keys = [k for k in data_manager.keys() if "bad_expr_skip" in str(k)]
+        assert len(skip_keys) == 0
 
     def test_all_keys_missing_warns_no_evaluation(self, data_manager, caplog):
-        """If no directory can satisfy the expression, warn that zero
-        directories were evaluated."""
+        """With zero_if_missing=True (default), even when all keys are missing
+        the expression is still evaluated (all operands become zero).  With
+        zero_if_missing=False, no directory satisfies the expression and a
+        warning is logged."""
         data_manager.register_data_key("LCOW", "LCOW")
         fake_a = ExpressionNode._key_node("fake_a")
         fake_b = ExpressionNode._key_node("fake_b")
-        data_manager.register_expression(fake_a + fake_b, return_key="totally_fake")
 
         import logging
 
+        # --- default (zero_if_missing=True): expression IS evaluated ---
+        data_manager.register_expression(fake_a + fake_b, return_key="totally_fake")
         with caplog.at_level(
             logging.DEBUG, logger="psPlotKit.data_manager.ps_data_manager"
         ):
             data_manager.load_data()
 
+        result_keys = [k for k in data_manager.keys() if "totally_fake" in str(k)]
+        assert len(result_keys) > 0
+
+        # --- explicit zero_if_missing=False: no evaluation ---
+        caplog.clear()
+        data_manager.register_expression(
+            fake_a + fake_b,
+            return_key="totally_fake_skip",
+            zero_if_missing=False,
+        )
+        with caplog.at_level(
+            logging.DEBUG, logger="psPlotKit.data_manager.ps_data_manager"
+        ):
+            data_manager.evaluate_expressions()
+
         assert (
             "not evaluated" in caplog.text.lower()
             or "was not evaluated" in caplog.text.lower()
         )
+        skip_keys = [k for k in data_manager.keys() if "totally_fake_skip" in str(k)]
+        assert len(skip_keys) == 0
 
     def test_no_expressions_registered(self, data_manager):
         """evaluate_expressions with nothing registered should be a no-op."""
