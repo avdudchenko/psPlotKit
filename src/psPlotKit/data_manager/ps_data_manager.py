@@ -1138,22 +1138,48 @@ class PsDataManager(dict):
                     )
                     continue
 
+                # Fixed but leaving here for future notes - this should never
+                # occur now as PsData convert string function should not break
+                # complex units
+
                 # Apply unit conversion on the raw Quantity before wrapping
                 # in PsData, so that compound units (e.g. W*USD/kWh) are
                 # handled by the quantities library directly rather than
                 # going through PsData's string-based unit roundtrip which
                 # can lose dimensional information.
-                if units is not None and hasattr(result_quantity, "rescale"):
-                    try:
-                        result_quantity = result_quantity.rescale(units)
-                    except Exception as e:
-                        _log_level(
-                            "Expression for '{}' failed unit conversion "
-                            "in directory '{}': {}".format(return_key, dir_key, e)
-                        )
-                        continue
+                # if units is not None and hasattr(result_quantity, "rescale"):
+                #     try:
+                #         result_quantity = result_quantity.rescale(units)
+                #     except Exception as e:
+                #         _log_level(
+                #             "Expression for '{}' failed unit conversion "
+                #             "in directory '{}': {}".format(return_key, dir_key, e)
+                #         )
+                #         continue
 
-                # Wrap the result in a PsData
+                # Wrap the result in a PsData.  When zero-filled data is
+                # involved the computed units may be nonsensical (e.g.
+                # dimensionless 0 * USD/kWh → USD/kWh instead of USD/yr),
+                # so try the proper units conversion first and only fall
+                # back to assign_units if it actually fails.
+                _effective_units = units
+                _effective_assign = assign_units
+                if has_zero_fill and units is not None:
+                    try:
+                        # Probe whether the conversion is dimensionally valid
+                        _probe = (
+                            result_quantity
+                            if hasattr(result_quantity, "rescale")
+                            else None
+                        )
+                        if _probe is not None:
+                            _probe.rescale(
+                                PsData.__new__(PsData)._convert_string_unit(units)
+                            )
+                    except Exception:
+                        # Dimensions don't match — fall back to labelling only
+                        _effective_units = None
+                        _effective_assign = units
                 result = PsData(
                     data_key=return_key,
                     data_type="zero_fill" if has_zero_fill else "expression_result",
@@ -1162,16 +1188,18 @@ class PsDataManager(dict):
                         if hasattr(result_quantity, "magnitude")
                         else np.atleast_1d(np.asarray(result_quantity))
                     ),
+                    assign_units=_effective_assign,
+                    units=_effective_units,
                 )
                 result.data_key = return_key
                 result.data_label = return_key
 
-                if assign_units is not None:
-                    result.assign_units(assign_units)
-                if units is not None:
-                    # Already rescaled above; assign the target units
-                    # to ensure PsData reflects them correctly.
-                    result.assign_units(units)
+                # if assign_units is not None:
+                #     result.assign_units(assign_units)
+                # if units is not None:
+                #     # Already rescaled above; assign the target units
+                #     # to ensure PsData reflects them correctly.
+                #     result.assign_units(units)
 
                 self.add_data(dir_key, return_key, result)
                 evaluated_count += 1
