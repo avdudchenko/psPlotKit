@@ -985,7 +985,7 @@ class PsDataManager(dict):
         return_key,
         units=None,
         assign_units=None,
-        zero_if_missing=False,
+        zero_if_missing=True,
     ):
         """Register an arithmetic expression to be evaluated on imported data.
 
