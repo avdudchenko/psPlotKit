@@ -1006,7 +1006,7 @@ class PsDataManager(dict):
             return_key: key under which the result will be stored.
             units: (optional) units to convert the result to after evaluation.
             assign_units: (optional) units to assign to the result.
-            zero_if_missing: if *True*, any required key that is absent in a
+            zero_if_missing: (default: True) if *True*, any required key that is absent in a
                 directory will be replaced with a zero-valued array (matching
                 the shape of an available sibling key) instead of skipping
                 the entire directory.  Useful for summing discovered cost
