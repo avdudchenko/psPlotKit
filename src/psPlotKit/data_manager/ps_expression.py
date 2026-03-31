@@ -229,12 +229,8 @@ class ExpressionNode:
                 if left_is_qty and right_is_qty:
                     left_mag = np.asarray(left_val.magnitude)
                     right_mag = np.asarray(right_val.magnitude)
-                    left_is_zero = np.all(
-                        np.isnan(left_mag) | (left_mag == 0)
-                    )
-                    right_is_zero = np.all(
-                        np.isnan(right_mag) | (right_mag == 0)
-                    )
+                    left_is_zero = np.all(np.isnan(left_mag) | (left_mag == 0))
+                    right_is_zero = np.all(np.isnan(right_mag) | (right_mag == 0))
                     if left_is_zero:
                         if self.op == "+":
                             return right_val.copy()
