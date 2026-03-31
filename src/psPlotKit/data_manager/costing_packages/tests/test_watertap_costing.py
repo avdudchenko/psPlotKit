@@ -105,6 +105,65 @@ def test_with_stages():
         )
 
 
+def test_with_separate_capex_opex():
+    dm = PsDataManager(_h5_file)
+    stage_1 = PsCostingGroup("stage 1")
+    stage_1.add_unit(
+        "stage[1].RO",
+        capex_keys="capital_cost",
+        fixed_opex_keys="fixed_operating_cost",
+    )
+    stage_1.add_unit(
+        "stage[1].pump",
+        capex_keys="capital_cost",
+    )
+    stage_2 = PsCostingGroup("stage 2")
+    stage_2.add_unit(
+        "stage[2].RO",
+        capex_keys="capital_cost",
+        fixed_opex_keys="fixed_operating_cost",
+    )
+    stage_2.add_unit(
+        "stage[2].pump",
+        capex_keys="capital_cost",
+    )
+    erd = PsCostingGroup("ERD")
+    erd.add_unit(
+        "ERD",
+        capex_keys="capital_cost",
+    )
+    power = PsCostingGroup("Power")
+    power.add_unit(
+        "stage[1].pump",
+        flow_keys={"electricity": "control_volume.work"},
+    )
+    power.add_unit(
+        "stage[2].pump",
+        flow_keys={"electricity": "control_volume.work"},
+    )
+    power.add_unit(
+        "ERD",
+        flow_keys={"electricity": "control_volume.work"},
+    )
+    pkg = WaterTapCostingPackage()
+    pkg.register_product_flow()
+    cm = PsCostingManager(dm, pkg, [stage_1, stage_2, erd, power])
+    cm.build()
+    dm.display()
+    # Verify the total key was created and matches the reference in ALL directories
+    for dkey in dm.directory_keys:
+        total_lcow = dm[(*dkey, ("costing", "total", "LCOW"))].data
+        ref_lcow = dm[(*dkey, ("costing", "validation", "LCOW"))].data
+        mask = np.isfinite(total_lcow) & np.isfinite(ref_lcow)
+        assert np.any(mask), "No finite values in directory {}".format(dkey)
+        np.testing.assert_allclose(
+            np.asarray(total_lcow)[mask],
+            np.asarray(ref_lcow)[mask],
+            rtol=1e-4,
+            err_msg="LCOW mismatch in directory {}".format(dkey),
+        )
+
+
 def test_with_custom_expressions():
     dm = PsDataManager(_h5_file)
     dm.register_data_key(
