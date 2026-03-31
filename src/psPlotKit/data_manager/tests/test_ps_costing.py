@@ -838,6 +838,7 @@ class TestPsCostingManagerSynthetic:
         cm._group_flow_type_keys["Pumps"] = {"electricity": ["pump_elec"]}
 
         cm._build_group_expressions()
+        cm._register_zero_sentinel()
         cm._build_flow_expressions()
         cm._build_per_group_flow_expressions()
         # Skip _build_formula_expressions — the global formula would fail
