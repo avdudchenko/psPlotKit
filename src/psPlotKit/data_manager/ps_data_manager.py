@@ -1215,3 +1215,4 @@ class PsDataManager(dict):
                         evaluated_count, return_key
                     )
                 )
+        self._registered_expressions = []

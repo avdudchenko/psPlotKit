@@ -215,11 +215,36 @@ class ExpressionNode:
                 result = left_mag - right_mag
             return qs.Quantity(result, units)
 
-        if self.op == "+":
-            return left_val + right_val
-        elif self.op == "-":
-            return left_val - right_val
-        elif self.op == "*":
+        if self.op in ("+", "-"):
+            try:
+                if self.op == "+":
+                    return left_val + right_val
+                else:
+                    return left_val - right_val
+            except (ValueError, AssertionError):
+                # When both operands are Quantities with incompatible units
+                # but one is entirely zeros (e.g. from a const(0) proxy for
+                # a missing cost type), the zero side is negligible — adopt
+                # the non-zero operand's units.
+                if left_is_qty and right_is_qty:
+                    left_mag = np.asarray(left_val.magnitude)
+                    right_mag = np.asarray(right_val.magnitude)
+                    left_is_zero = np.all(
+                        np.isnan(left_mag) | (left_mag == 0)
+                    )
+                    right_is_zero = np.all(
+                        np.isnan(right_mag) | (right_mag == 0)
+                    )
+                    if left_is_zero:
+                        if self.op == "+":
+                            return right_val.copy()
+                        else:
+                            return qs.Quantity(-right_mag, right_val.units)
+                    if right_is_zero:
+                        return left_val.copy()
+                raise
+
+        if self.op == "*":
             return left_val * right_val
         elif self.op == "/":
             return left_val / right_val

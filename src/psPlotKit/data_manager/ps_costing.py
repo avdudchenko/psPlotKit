@@ -53,8 +53,15 @@ Example
 
 import numpy as np
 
+from psPlotKit.data_manager.ps_data import PsData
 from psPlotKit.data_manager.ps_expression import ExpressionNode
 from psPlotKit.util.logger import define_logger
+
+# Sentinel key used by _GroupExpressionKeys to reference a zero-fill
+# PsData instead of an inline const(0).  This ensures that downstream
+# expressions inherit the "zero_fill" data_type and trigger the
+# unit-fallback logic in evaluate_expressions().
+_ZERO_SENTINEL_KEY = ("costing", "_zero_sentinel")
 
 __author__ = "Alexander V. Dudchenko "
 
@@ -128,7 +135,7 @@ class _GroupExpressionKeys:
         if name in alias_map:
             target = alias_map[name]
             if target is None:
-                return ExpressionNode._const_node(0)
+                return real_ek[_ZERO_SENTINEL_KEY]
             return real_ek[target]
         return getattr(real_ek, name)
 
@@ -138,7 +145,7 @@ class _GroupExpressionKeys:
         if key in alias_map:
             target = alias_map[key]
             if target is None:
-                return ExpressionNode._const_node(0)
+                return real_ek[_ZERO_SENTINEL_KEY]
             return real_ek[target]
         return real_ek[key]
 
@@ -512,6 +519,7 @@ class PsCostingManager:
         if load_data:
             self.data_manager.load_data(evaluate_expressions=False)
 
+        self._register_zero_sentinel()
         self._build_group_expressions()
         self._build_flow_expressions()
         self._build_per_group_flow_expressions()
@@ -766,6 +774,27 @@ class PsCostingManager:
     # ------------------------------------------------------------------
     # expression building
     # ------------------------------------------------------------------
+
+    def _register_zero_sentinel(self):
+        """Register a zero-fill sentinel PsData in every directory.
+
+        The sentinel is referenced by :class:`_GroupExpressionKeys` when
+        a group lacks a cost type (capex, fixed_opex, or flow_cost).
+        Using a real ``data_type="zero_fill"`` PsData rather than an
+        inline ``const(0)`` ensures that the ``has_zero_fill`` detection
+        in :meth:`PsDataManager.evaluate_expressions` triggers the
+        unit-fallback logic for downstream chained formulas.
+        """
+        for dir_key in self.data_manager.directory_keys:
+            sentinel = PsData(
+                data_key=_ZERO_SENTINEL_KEY,
+                data_type="zero_fill",
+                data_array=np.array(0),
+            )
+            self.data_manager.add_data(dir_key, _ZERO_SENTINEL_KEY, sentinel)
+        # Ensure the key is available in ExpressionKeys
+        if self.data_manager._expression_keys is not None:
+            self.data_manager._expression_keys.add_key(_ZERO_SENTINEL_KEY)
 
     def _build_group_expressions(self):
         """Build per-group capex / fixed-opex and the two aggregate
