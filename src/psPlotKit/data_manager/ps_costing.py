@@ -51,6 +51,8 @@ Example
     cm.build()
 """
 
+import difflib
+
 import numpy as np
 
 from psPlotKit.data_manager.ps_data import PsData
@@ -490,6 +492,7 @@ class PsCostingManager:
         self._flow_type_keys = {}  # flow_type → [return_keys]
         self._group_flow_type_keys = {}  # group_name → {flow_type → [return_keys]}
         self._per_group_formula_keys = {}  # formula_return_key → [per-group rks]
+        self._unfound_unit_keys = []  # list of (group, unit, cost_type, suffix)
 
     # ------------------------------------------------------------------
     # public API
@@ -512,6 +515,7 @@ class PsCostingManager:
         """
         self.data_manager._load_registered_data_files()
         self._discover_keys()
+        self._check_discovery_status()
         self._register_parameters()
         self._register_discovered_keys()
         self._register_validation_keys()
@@ -562,6 +566,7 @@ class PsCostingManager:
         _logger.info(
             "Searching {} available keys for costing data.".format(len(available))
         )
+        self._unfound_unit_keys = []
 
         for group in self.costing_groups:
             capex_return_keys = []
@@ -574,6 +579,10 @@ class PsCostingManager:
                     found = self._find_matching_keys(
                         available, unit_name, group.costing_block_key, suffix
                     )
+                    if not found:
+                        self._unfound_unit_keys.append(
+                            (group.name, unit_name, "capex", suffix)
+                        )
                     for file_key in found:
                         rk = self._make_return_key(
                             group.name, unit_name, "capex", suffix, file_key
@@ -586,6 +595,10 @@ class PsCostingManager:
                     found = self._find_matching_keys(
                         available, unit_name, group.costing_block_key, suffix
                     )
+                    if not found:
+                        self._unfound_unit_keys.append(
+                            (group.name, unit_name, "fixed_opex", suffix)
+                        )
                     for file_key in found:
                         rk = self._make_return_key(
                             group.name, unit_name, "fixed_opex", suffix, file_key
@@ -601,6 +614,15 @@ class PsCostingManager:
                             unit_name,
                             suffix,
                         )
+                        if not found:
+                            self._unfound_unit_keys.append(
+                                (
+                                    group.name,
+                                    unit_name,
+                                    "flow({})".format(flow_type),
+                                    suffix,
+                                )
+                            )
                         for file_key in found:
                             rk = self._make_return_key(
                                 group.name, unit_name, "flow", suffix, file_key
@@ -635,6 +657,54 @@ class PsCostingManager:
                     len(flow_type_return_keys),
                 )
             )
+
+    def _check_discovery_status(self):
+        """Check if all requested unit key patterns were discovered.
+
+        Logs any unit key suffixes that were requested via
+        :meth:`PsCostingGroup.add_unit` but matched zero available keys.
+        For each unfound suffix, the top 10 nearest available keys are
+        displayed to help identify typos or alternative key names.
+
+        Raises:
+            KeyError: if any requested key patterns were not discovered.
+        """
+        if not self._unfound_unit_keys:
+            return
+
+        available = sorted(self._get_all_available_keys())
+        _logger.warning(
+            "{} requested costing key pattern(s) were NOT discovered.".format(
+                len(self._unfound_unit_keys)
+            )
+        )
+
+        for group_name, unit_name, cost_type, suffix in self._unfound_unit_keys:
+            search_term = "{}.{}.{}".format(unit_name, "costing", suffix)
+            _logger.warning(
+                "  Group '{}', unit '{}', {} key '{}' — no matching keys found.".format(
+                    group_name, unit_name, cost_type, suffix
+                )
+            )
+            nearest = difflib.get_close_matches(
+                search_term, available, n=10, cutoff=0.3
+            )
+            if nearest:
+                _logger.warning("    Nearest available keys:")
+                for n in nearest:
+                    _logger.warning("      {}".format(n))
+            else:
+                _logger.warning("    No similar keys found in available data.")
+
+        raise KeyError(
+            "The following requested costing key patterns were not discovered: "
+            "{}".format(
+                [
+                    "group='{}' unit='{}' {}='{}'".format(g, u, ct, s)
+                    for g, u, ct, s in self._unfound_unit_keys
+                ]
+            )
+        )
 
     @staticmethod
     def _match_unit_segments(parts, unit_name):
