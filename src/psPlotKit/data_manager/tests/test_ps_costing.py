@@ -1279,6 +1279,7 @@ class TestCheckDiscoveryStatus:
         cm._discover_keys()
         # capital_cost should have been found
         assert len(cm._group_capex_keys["Membrane"]) >= 1
-        # missing_opex_key should be unfound
-        with pytest.raises(KeyError, match="missing_opex_key"):
+        # missing_opex_key should be unfound; capital_cost (found) must NOT appear
+        with pytest.raises(KeyError, match="missing_opex_key") as exc_info:
             cm._check_discovery_status()
+        assert "capital_cost" not in str(exc_info.value)
