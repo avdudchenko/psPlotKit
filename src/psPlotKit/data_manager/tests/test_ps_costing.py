@@ -1200,3 +1200,86 @@ class TestPsCostingManagerSynthetic:
         ]
         total = sum(np.asarray(f.data) for f in fracs)
         np.testing.assert_array_almost_equal(total, [100.0, 100.0])
+
+
+# ---------------------------------------------------------------------------
+# _check_discovery_status
+# ---------------------------------------------------------------------------
+
+
+class TestCheckDiscoveryStatus:
+    def test_no_error_when_all_keys_found(self, bgw_dm):
+        """When all requested keys match, _check_discovery_status should not raise."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit("ROUnits", capex_keys=["capital_cost"])
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        cm._discover_keys()
+        # Should not raise
+        cm._check_discovery_status()
+
+    def test_error_on_unfound_capex_key(self, bgw_dm):
+        """A capex key suffix that matches nothing should raise KeyError."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit("ROUnits", capex_keys=["nonexistent_cost_key"])
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        cm._discover_keys()
+        with pytest.raises(KeyError, match="nonexistent_cost_key"):
+            cm._check_discovery_status()
+
+    def test_error_on_unfound_fixed_opex_key(self, bgw_dm):
+        """A fixed_opex key suffix that matches nothing should raise KeyError."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit("ROUnits", fixed_opex_keys=["nonexistent_opex"])
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        cm._discover_keys()
+        with pytest.raises(KeyError, match="nonexistent_opex"):
+            cm._check_discovery_status()
+
+    def test_error_on_unfound_flow_key(self, bgw_dm):
+        """A flow key suffix that matches nothing should raise KeyError."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit(
+            "ROUnits",
+            flow_keys={"electricity": ["nonexistent_flow"]},
+        )
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        cm._discover_keys()
+        with pytest.raises(KeyError, match="nonexistent_flow"):
+            cm._check_discovery_status()
+
+    def test_build_raises_on_unfound_key(self, bgw_dm):
+        """Full build() should raise KeyError when a requested key is not found."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit("ROUnits", capex_keys=["capital_cost", "bogus_key"])
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        with pytest.raises(KeyError, match="bogus_key"):
+            cm.build()
+
+    def test_mixed_found_and_unfound(self, bgw_dm):
+        """Only unfound keys should appear in the error — found ones should not."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit(
+            "ROUnits",
+            capex_keys=["capital_cost"],
+            fixed_opex_keys=["missing_opex_key"],
+        )
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        cm._discover_keys()
+        # capital_cost should have been found
+        assert len(cm._group_capex_keys["Membrane"]) >= 1
+        # missing_opex_key should be unfound; capital_cost (found) must NOT appear
+        with pytest.raises(KeyError, match="missing_opex_key") as exc_info:
+            cm._check_discovery_status()
+        assert "capital_cost" not in str(exc_info.value)
