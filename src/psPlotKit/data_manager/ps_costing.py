@@ -682,7 +682,7 @@ class PsCostingManager:
         for group_name, unit_name, cost_type, suffix in self._unfound_unit_keys:
             search_term = "{}.{}.{}".format(unit_name, "costing", suffix)
             _logger.warning(
-                "  Group '{}', unit '{}', {} key '{}' — no matching keys found.".format(
+                "  Group '{}', unit '{}', {} key '{}' - no matching keys found.".format(
                     group_name, unit_name, cost_type, suffix
                 )
             )
