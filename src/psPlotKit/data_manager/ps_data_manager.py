@@ -691,7 +691,7 @@ class PsDataManager(dict):
             return sorted_idxs, idxs, idx_type
 
         for udir in self.keys():
-            if str(new_directory) not in str(udir) and str(data_key) in str(
+            if new_directory not in udir and str(data_key) in str(
                 self._get_data_key(udir)
             ):
 
@@ -877,7 +877,6 @@ class PsDataManager(dict):
         current_keys = self.data_keys[:]
         for data_key in current_keys:
             if str(stack_directory) not in str(data_key):
-                # print("stack_keys", stack_keys, data_key)
                 self.generate_data_stack(
                     stack_keys,
                     data_key,
