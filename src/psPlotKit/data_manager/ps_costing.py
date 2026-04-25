@@ -51,8 +51,11 @@ Example
     cm.build()
 """
 
+import difflib
+
 import numpy as np
 
+import quantities as qs
 from psPlotKit.data_manager.ps_data import PsData
 from psPlotKit.data_manager.ps_expression import ExpressionNode
 from psPlotKit.util.logger import define_logger
@@ -334,7 +337,14 @@ class PsCostingPackage:
             }
         )
 
-    def add_flow_cost(self, flow_type, cost_parameter, units=None, assign_units=None):
+    def add_flow_cost(
+        self,
+        flow_type,
+        cost_parameter_key,
+        parameter_units=None,
+        parameter_assign_units=None,
+        aggregate_units="USD/yr",
+    ):
         """Register the cost multiplier for a flow type.
 
         The *cost_parameter* must be a parameter name registered via
@@ -344,15 +354,20 @@ class PsCostingPackage:
 
         Args:
             flow_type: Name of the flow type (e.g. ``"electricity"``).
-            cost_parameter: Parameter name giving the unit cost
-                (e.g. ``"electricity_cost"`` in $/kWh).
-            units: Units to convert the flow cost to after evaluation.
-            assign_units: Units to assign to the flow cost result.
+            cost_parameter_key: Parameter key with costs that is imported from the h5 (e.g. ``"electricity_cost"``).
+            parameter_units: Units to convert the cost parameter to
+            parameter_assign_units: Units to assign to cost parameter if there is none.
+            aggregate_units: Units for final aggregate flow after flow is multiplied by cost parameter (generally USD/year).
         """
+        self.add_parameter(
+            cost_parameter_key,
+            units=parameter_units,
+            assign_units=parameter_assign_units,
+        )
         self._flow_costs[flow_type] = {
-            "cost_parameter": cost_parameter,
-            "units": units,
-            "assign_units": assign_units,
+            "cost_parameter": cost_parameter_key,
+            "units": aggregate_units,
+            "assign_units": None,
         }
 
     @property
@@ -490,6 +505,7 @@ class PsCostingManager:
         self._flow_type_keys = {}  # flow_type → [return_keys]
         self._group_flow_type_keys = {}  # group_name → {flow_type → [return_keys]}
         self._per_group_formula_keys = {}  # formula_return_key → [per-group rks]
+        self._unfound_unit_keys = []  # list of (group, unit, cost_type, suffix)
 
     # ------------------------------------------------------------------
     # public API
@@ -512,6 +528,7 @@ class PsCostingManager:
         """
         self.data_manager._load_registered_data_files()
         self._discover_keys()
+        self._check_discovery_status()
         self._register_parameters()
         self._register_discovered_keys()
         self._register_validation_keys()
@@ -562,6 +579,7 @@ class PsCostingManager:
         _logger.info(
             "Searching {} available keys for costing data.".format(len(available))
         )
+        self._unfound_unit_keys = []
 
         for group in self.costing_groups:
             capex_return_keys = []
@@ -574,6 +592,10 @@ class PsCostingManager:
                     found = self._find_matching_keys(
                         available, unit_name, group.costing_block_key, suffix
                     )
+                    if not found:
+                        self._unfound_unit_keys.append(
+                            (group.name, unit_name, "capex", suffix)
+                        )
                     for file_key in found:
                         rk = self._make_return_key(
                             group.name, unit_name, "capex", suffix, file_key
@@ -586,6 +608,10 @@ class PsCostingManager:
                     found = self._find_matching_keys(
                         available, unit_name, group.costing_block_key, suffix
                     )
+                    if not found:
+                        self._unfound_unit_keys.append(
+                            (group.name, unit_name, "fixed_opex", suffix)
+                        )
                     for file_key in found:
                         rk = self._make_return_key(
                             group.name, unit_name, "fixed_opex", suffix, file_key
@@ -601,6 +627,15 @@ class PsCostingManager:
                             unit_name,
                             suffix,
                         )
+                        if not found:
+                            self._unfound_unit_keys.append(
+                                (
+                                    group.name,
+                                    unit_name,
+                                    "flow({})".format(flow_type),
+                                    suffix,
+                                )
+                            )
                         for file_key in found:
                             rk = self._make_return_key(
                                 group.name, unit_name, "flow", suffix, file_key
@@ -636,6 +671,54 @@ class PsCostingManager:
                 )
             )
 
+    def _check_discovery_status(self):
+        """Check if all requested unit key patterns were discovered.
+
+        Logs any unit key suffixes that were requested via
+        :meth:`PsCostingGroup.add_unit` but matched zero available keys.
+        For each unfound suffix, the top 10 nearest available keys are
+        displayed to help identify typos or alternative key names.
+
+        Raises:
+            KeyError: if any requested key patterns were not discovered.
+        """
+        if not self._unfound_unit_keys:
+            return
+
+        available = sorted(self._get_all_available_keys())
+        _logger.warning(
+            "{} requested costing key pattern(s) were NOT discovered.".format(
+                len(self._unfound_unit_keys)
+            )
+        )
+
+        for group_name, unit_name, cost_type, suffix in self._unfound_unit_keys:
+            search_term = "{}.{}.{}".format(unit_name, "costing", suffix)
+            _logger.warning(
+                "  Group '{}', unit '{}', {} key '{}' - no matching keys found.".format(
+                    group_name, unit_name, cost_type, suffix
+                )
+            )
+            nearest = difflib.get_close_matches(
+                search_term, available, n=10, cutoff=0.3
+            )
+            if nearest:
+                _logger.warning("    Nearest available keys:")
+                for n in nearest:
+                    _logger.warning("      {}".format(n))
+            else:
+                _logger.warning("    No similar keys found in available data.")
+
+        raise KeyError(
+            "The following requested costing key patterns were not discovered: "
+            "{}".format(
+                [
+                    "group='{}' unit='{}' {}='{}'".format(g, u, ct, s)
+                    for g, u, ct, s in self._unfound_unit_keys
+                ]
+            )
+        )
+
     @staticmethod
     def _match_unit_segments(parts, unit_name):
         """Find the position where *unit_name* matches within *parts*.
@@ -655,6 +738,7 @@ class PsCostingManager:
         """
         unit_parts = _split_key(unit_name)
         n = len(unit_parts)
+        matched = False
         for start in range(len(parts) - n + 1):
             matched = True
             for j, up in enumerate(unit_parts):
@@ -671,6 +755,7 @@ class PsCostingManager:
                         break
             if matched:
                 return start + n - 1  # index of last matched segment
+
         return None
 
     @staticmethod
@@ -715,7 +800,8 @@ class PsCostingManager:
                 continue
             remainder_parts = parts[unit_end + 1 :]
             stripped = ".".join(p.split("[")[0] for p in remainder_parts)
-            if stripped == suffix:
+            unstripped = ".".join(remainder_parts)
+            if stripped == suffix or unstripped == suffix:
                 matches.append(key)
         return matches
 
@@ -911,7 +997,11 @@ class PsCostingManager:
                 cost_param_rk = ("costing", cost_param_name)
                 ek = self.data_manager.get_expression_keys()
                 flow_cost_rk = ("costing", "{}_flow_cost".format(flow_type))
-                expr = ek[agg_flow_rk] * ek[cost_param_rk]
+                expr = (
+                    ek[agg_flow_rk]
+                    * ek[cost_param_rk]
+                    # * self.costing_package.operational_time
+                )
                 self.data_manager.register_expression(
                     expr,
                     return_key=flow_cost_rk,

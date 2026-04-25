@@ -145,8 +145,13 @@ class BreakDownPlotter:
                     return True
             else:
                 for di in d:
-                    if key == di:
-                        return True
+                    if isinstance(di, str):
+                        if key == di:
+                            return True
+                    else:
+                        for _di in di:
+                            if key == _di:
+                                return True
         return False
 
     def _get_group_options(self, selected_keys, xdata, ydata):
@@ -171,10 +176,6 @@ class BreakDownPlotter:
                         opts["hatch"] = self.hatch_options[i]
 
                     self.hatch_groups[key] = copy.deepcopy(opts)
-                    # if key not in self.line_indexes:
-                    #     self.line_indexes[key] = {"idx": 0, "auto": True}
-
-            # Then check if there are options based on akey
             for akey in self.area_groups:
                 _label = None
                 if isinstance(akey, dict):
@@ -232,12 +233,13 @@ class BreakDownPlotter:
                         cur_line["color"] = color
                         cur_line["label"] = plot_label
                         self.plot_areas[akey] = cur_line
+
         self.plot_order = []
         for akey in self.area_groups:
             if isinstance(akey, dict):
                 akey, item = list(akey.items())[0]
             for key in self.plot_areas.keys():
-                if akey in key:
+                if akey == key:
                     self.plot_order.append(key)
         # assert False
 

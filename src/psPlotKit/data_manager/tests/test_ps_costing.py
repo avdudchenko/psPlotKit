@@ -165,7 +165,7 @@ class TestPsCostingPackage:
         assert pkg.flow_costs == {
             "electricity": {
                 "cost_parameter": "electricity_cost",
-                "units": None,
+                "units": "USD/yr",
                 "assign_units": None,
             }
         }
@@ -573,11 +573,13 @@ class TestPsCostingManagerSynthetic:
 
         # electricity_flow_cost = 15*0.07, 28*0.07
         flow_cost = dm.get_data("d", ("costing", "electricity_flow_cost"))
-        np.testing.assert_array_almost_equal(flow_cost.data, [1.05, 1.96])
+        np.testing.assert_array_almost_equal(
+            flow_cost.data, [9204.103409, 17180.993031]
+        )
 
         # aggregate_flow_cost = same (only one flow type)
         agg_cost = dm.get_data("d", ("costing", "aggregate_flow_cost"))
-        np.testing.assert_array_almost_equal(agg_cost.data, [1.05, 1.96])
+        np.testing.assert_array_almost_equal(agg_cost.data, [9204.103409, 17180.993031])
 
     def test_aggregate_flow_cost_multiple_types(self):
         """Two flow types should each aggregate separately; total sums them."""
@@ -589,8 +591,10 @@ class TestPsCostingManagerSynthetic:
         dm.add_data("d", ("costing", "chemical_cost"), [1.0, 1.0])
 
         pkg = PsCostingPackage()
-        pkg.add_flow_cost("electricity", "electricity_cost")
-        pkg.add_flow_cost("chemicals", "chemical_cost")
+        pkg.add_flow_cost(
+            "electricity", "electricity_cost", aggregate_units="dimensionless"
+        )
+        pkg.add_flow_cost("chemicals", "chemical_cost", aggregate_units="dimensionless")
 
         g = PsCostingGroup("RO")
         cm = PsCostingManager(dm, pkg, [g])
@@ -682,19 +686,19 @@ class TestPsCostingManagerSynthetic:
 
         # Per-group flow costs
         pump_fc = dm.get_data("d", ("costing", "Pumps", "electricity_flow_cost"))
-        np.testing.assert_array_almost_equal(pump_fc.data, [0.7, 1.4])
+        np.testing.assert_array_almost_equal(pump_fc.data, [6136.06894, 12272.137879])
         erd_fc = dm.get_data("d", ("costing", "ERD", "electricity_flow_cost"))
-        np.testing.assert_array_almost_equal(erd_fc.data, [0.21, 0.35])
+        np.testing.assert_array_almost_equal(erd_fc.data, [1840.820682, 3068.03447])
 
         # Per-group aggregate flow cost
         pump_afc = dm.get_data("d", ("costing", "Pumps", "flow_cost"))
-        np.testing.assert_array_almost_equal(pump_afc.data, [0.7, 1.4])
+        np.testing.assert_array_almost_equal(pump_afc.data, [6136.06894, 12272.137879])
         erd_afc = dm.get_data("d", ("costing", "ERD", "flow_cost"))
-        np.testing.assert_array_almost_equal(erd_afc.data, [0.21, 0.35])
+        np.testing.assert_array_almost_equal(erd_afc.data, [1840.820682, 3068.03447])
 
         # Global aggregate should still be the sum
         agg = dm.get_data("d", ("costing", "aggregate_flow_cost"))
-        np.testing.assert_array_almost_equal(agg.data, [0.91, 1.75])
+        np.testing.assert_array_almost_equal(agg.data, [7976.889621, 15340.172349])
 
     # ------------------------------------------------------------------
     # Per-group formula expressions
@@ -785,7 +789,9 @@ class TestPsCostingManagerSynthetic:
         dm.add_data("d", "capital_recovery_factor", [0.1, 0.1])
 
         pkg = PsCostingPackage()
-        pkg.add_flow_cost("electricity", "electricity_cost")
+        pkg.add_flow_cost(
+            "electricity", "electricity_cost", aggregate_units="dimensionless"
+        )
         pkg.add_formula(
             "total_cost",
             lambda ek: (
@@ -821,7 +827,9 @@ class TestPsCostingManagerSynthetic:
         dm.add_data("d", "capital_recovery_factor", [0.1, 0.1])
 
         pkg = PsCostingPackage()
-        pkg.add_flow_cost("electricity", "electricity_cost")
+        pkg.add_flow_cost(
+            "electricity", "electricity_cost", aggregate_units="dimensionless"
+        )
         pkg.add_formula(
             "total_cost",
             lambda ek: (
@@ -879,7 +887,7 @@ class TestPsCostingManagerSynthetic:
         np.testing.assert_array_almost_equal(agg_flow.data, [10.0, 20.0])
 
         flow_cost = dm.get_data("d", ("costing", "electricity_flow_cost"))
-        np.testing.assert_array_almost_equal(flow_cost.data, [0.5, 1.0])
+        np.testing.assert_array_almost_equal(flow_cost.data, [4382.906385, 8765.812771])
 
     def test_formula_aggregate_flow_cost_per_type(self):
         """Formulas can reference individual flow-type costs via
@@ -891,7 +899,9 @@ class TestPsCostingManagerSynthetic:
 
         pkg = PsCostingPackage()
         pkg.add_parameter("product_flow", file_key="dummy")
-        pkg.add_flow_cost("electricity", "electricity_cost")
+        pkg.add_flow_cost(
+            "electricity", "electricity_cost", aggregate_units="dimensionless"
+        )
         pkg.add_formula(
             "levelized_electricity",
             lambda ek: ek.aggregate_flow_cost_electricity / ek.product_flow,
@@ -1200,3 +1210,86 @@ class TestPsCostingManagerSynthetic:
         ]
         total = sum(np.asarray(f.data) for f in fracs)
         np.testing.assert_array_almost_equal(total, [100.0, 100.0])
+
+
+# ---------------------------------------------------------------------------
+# _check_discovery_status
+# ---------------------------------------------------------------------------
+
+
+class TestCheckDiscoveryStatus:
+    def test_no_error_when_all_keys_found(self, bgw_dm):
+        """When all requested keys match, _check_discovery_status should not raise."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit("ROUnits", capex_keys=["capital_cost"])
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        cm._discover_keys()
+        # Should not raise
+        cm._check_discovery_status()
+
+    def test_error_on_unfound_capex_key(self, bgw_dm):
+        """A capex key suffix that matches nothing should raise KeyError."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit("ROUnits", capex_keys=["nonexistent_cost_key"])
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        cm._discover_keys()
+        with pytest.raises(KeyError, match="nonexistent_cost_key"):
+            cm._check_discovery_status()
+
+    def test_error_on_unfound_fixed_opex_key(self, bgw_dm):
+        """A fixed_opex key suffix that matches nothing should raise KeyError."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit("ROUnits", fixed_opex_keys=["nonexistent_opex"])
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        cm._discover_keys()
+        with pytest.raises(KeyError, match="nonexistent_opex"):
+            cm._check_discovery_status()
+
+    def test_error_on_unfound_flow_key(self, bgw_dm):
+        """A flow key suffix that matches nothing should raise KeyError."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit(
+            "ROUnits",
+            flow_keys={"electricity": ["nonexistent_flow"]},
+        )
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        cm._discover_keys()
+        with pytest.raises(KeyError, match="nonexistent_flow"):
+            cm._check_discovery_status()
+
+    def test_build_raises_on_unfound_key(self, bgw_dm):
+        """Full build() should raise KeyError when a requested key is not found."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit("ROUnits", capex_keys=["capital_cost", "bogus_key"])
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        with pytest.raises(KeyError, match="bogus_key"):
+            cm.build()
+
+    def test_mixed_found_and_unfound(self, bgw_dm):
+        """Only unfound keys should appear in the error — found ones should not."""
+        pkg = PsCostingPackage()
+        g = PsCostingGroup("Membrane")
+        g.add_unit(
+            "ROUnits",
+            capex_keys=["capital_cost"],
+            fixed_opex_keys=["missing_opex_key"],
+        )
+
+        cm = PsCostingManager(bgw_dm, pkg, [g])
+        cm._discover_keys()
+        # capital_cost should have been found
+        assert len(cm._group_capex_keys["Membrane"]) >= 1
+        # missing_opex_key should be unfound; capital_cost (found) must NOT appear
+        with pytest.raises(KeyError, match="missing_opex_key") as exc_info:
+            cm._check_discovery_status()
+        assert "capital_cost" not in str(exc_info.value)
