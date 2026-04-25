@@ -183,7 +183,7 @@ class PsDataManager(dict):
     def get_expression_keys(self, warn_on_sanitize=False):
         """Return the live :class:`ExpressionKeys` reference for this manager.
 
-        The returned object is kept in sync with the manager — new keys
+        The returned object is kept in sync with the manager - new keys
         added via :meth:`add_data` or :meth:`register_data_key` are
         automatically available without calling this method again.
 
@@ -691,7 +691,7 @@ class PsDataManager(dict):
             return sorted_idxs, idxs, idx_type
 
         for udir in self.keys():
-            if str(new_directory) not in str(udir) and str(data_key) in str(
+            if new_directory not in udir and str(data_key) in str(
                 self._get_data_key(udir)
             ):
 
@@ -877,7 +877,6 @@ class PsDataManager(dict):
         current_keys = self.data_keys[:]
         for data_key in current_keys:
             if str(stack_directory) not in str(data_key):
-                # print("stack_keys", stack_keys, data_key)
                 self.generate_data_stack(
                     stack_keys,
                     data_key,
@@ -1177,7 +1176,7 @@ class PsDataManager(dict):
                                 PsData.__new__(PsData)._convert_string_unit(units)
                             )
                     except Exception:
-                        # Dimensions don't match — fall back to labelling only
+                        # Dimensions don't match - fall back to labelling only
                         _effective_units = None
                         _effective_assign = units
                 result = PsData(

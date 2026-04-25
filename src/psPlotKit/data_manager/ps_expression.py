@@ -95,7 +95,7 @@ class ExpressionNode:
     def _as_node(other):
         if isinstance(other, ExpressionNode):
             return other
-        if isinstance(other, (int, float, np.integer, np.floating)):
+        if isinstance(other, (int, float, np.integer, np.floating, qs.Quantity)):
             return ExpressionNode._const_node(other)
         raise TypeError(
             "Cannot combine ExpressionNode with type {}".format(type(other))

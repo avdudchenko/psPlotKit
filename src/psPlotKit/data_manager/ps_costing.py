@@ -55,6 +55,7 @@ import difflib
 
 import numpy as np
 
+import quantities as qs
 from psPlotKit.data_manager.ps_data import PsData
 from psPlotKit.data_manager.ps_expression import ExpressionNode
 from psPlotKit.util.logger import define_logger
@@ -336,7 +337,14 @@ class PsCostingPackage:
             }
         )
 
-    def add_flow_cost(self, flow_type, cost_parameter, units=None, assign_units=None):
+    def add_flow_cost(
+        self,
+        flow_type,
+        cost_parameter_key,
+        parameter_units=None,
+        parameter_assign_units=None,
+        aggregate_units="USD/yr",
+    ):
         """Register the cost multiplier for a flow type.
 
         The *cost_parameter* must be a parameter name registered via
@@ -346,15 +354,20 @@ class PsCostingPackage:
 
         Args:
             flow_type: Name of the flow type (e.g. ``"electricity"``).
-            cost_parameter: Parameter name giving the unit cost
-                (e.g. ``"electricity_cost"`` in $/kWh).
-            units: Units to convert the flow cost to after evaluation.
-            assign_units: Units to assign to the flow cost result.
+            cost_parameter_key: Parameter key with costs that is imported from the h5 (e.g. ``"electricity_cost"``).
+            parameter_units: Units to convert the cost parameter to
+            parameter_assign_units: Units to assign to cost parameter if there is none.
+            aggregate_units: Units for final aggregate flow after flow is multiplied by cost parameter (generally USD/year).
         """
+        self.add_parameter(
+            cost_parameter_key,
+            units=parameter_units,
+            assign_units=parameter_assign_units,
+        )
         self._flow_costs[flow_type] = {
-            "cost_parameter": cost_parameter,
-            "units": units,
-            "assign_units": assign_units,
+            "cost_parameter": cost_parameter_key,
+            "units": aggregate_units,
+            "assign_units": None,
         }
 
     @property
@@ -725,6 +738,7 @@ class PsCostingManager:
         """
         unit_parts = _split_key(unit_name)
         n = len(unit_parts)
+        matched = False
         for start in range(len(parts) - n + 1):
             matched = True
             for j, up in enumerate(unit_parts):
@@ -741,6 +755,7 @@ class PsCostingManager:
                         break
             if matched:
                 return start + n - 1  # index of last matched segment
+
         return None
 
     @staticmethod
@@ -785,7 +800,8 @@ class PsCostingManager:
                 continue
             remainder_parts = parts[unit_end + 1 :]
             stripped = ".".join(p.split("[")[0] for p in remainder_parts)
-            if stripped == suffix:
+            unstripped = ".".join(remainder_parts)
+            if stripped == suffix or unstripped == suffix:
                 matches.append(key)
         return matches
 
@@ -981,7 +997,11 @@ class PsCostingManager:
                 cost_param_rk = ("costing", cost_param_name)
                 ek = self.data_manager.get_expression_keys()
                 flow_cost_rk = ("costing", "{}_flow_cost".format(flow_type))
-                expr = ek[agg_flow_rk] * ek[cost_param_rk]
+                expr = (
+                    ek[agg_flow_rk]
+                    * ek[cost_param_rk]
+                    # * self.costing_package.operational_time
+                )
                 self.data_manager.register_expression(
                     expr,
                     return_key=flow_cost_rk,
