@@ -1,6 +1,5 @@
 
 *.csv
-*.csv
 psPlotKit/examples/figs/Water recovery vs LCOW.svg
 psPlotKit/examples/figs/Water recovery vs LCOW.csv
 psPlotKit/examples/figs/Brine salinity vs LCOW.svg
@@ -9,3 +8,4 @@ psPlotKit/examples/figs/Brine salinity vs LCOW.csv
 *.egg
 *.egg-info
 site/
+*.log
