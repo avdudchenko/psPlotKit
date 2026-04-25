@@ -263,9 +263,7 @@ class BreakDownPlotter:
 
         self._select_data(xdata, ydata)
         self.selected_data = self.PsData.get_selected_data()
-        self._get_group_options(
-            self.selected_data.keys(), xdata, ydata
-        )
+        self._get_group_options(self.selected_data.keys(), xdata, ydata)
         self.index = 0
         if axis_options is None:
             self.axis_options = {}
@@ -283,7 +281,7 @@ class BreakDownPlotter:
         self.plot_imported_data(ax_idx=ax_idx)
 
         # TODO: other plotters call this generate_plot, should make this consistent
-        if generate_plot:  
+        if generate_plot:
             self.generate_plot(ax_idx=ax_idx, loc=legend_loc, cols=legend_cols)
 
     def plot_imported_data(self, ax_idx=0):
@@ -311,7 +309,7 @@ class BreakDownPlotter:
             line["ydata"] = current_data
             self.fig.plot_area(ax_idx=ax_idx, **line)
             old_data = line["ydata"]
-        
+
         self.fig.set_axis(ax_idx=ax_idx, **self.axis_options)
 
     def generate_plot(self, ax_idx=0, loc="upper left", cols=2):
