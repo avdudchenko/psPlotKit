@@ -10,10 +10,14 @@ class WaterTapCostingPackage(PsCostingPackage):
         self.add_parameter("total_investment_factor")
         self.add_parameter("capital_recovery_factor")
         self.add_parameter("maintenance_labor_chemical_factor")
-        self.add_parameter("electricity_cost")
         self.add_parameter("wacc")
         self.add_parameter("plant_lifetime")
-        self.add_flow_cost("electricity", "electricity_cost", units="USD/yr")
+        self.add_flow_cost(
+            "electricity",
+            "electricity_cost",
+            parameter_units="USD/kWh",
+            aggregate_units="USD/yr",
+        )
         self.add_formula(
             "total_capital_cost",
             lambda ek: ek.aggregate_capital_cost * ek.total_investment_factor,
