@@ -354,10 +354,10 @@ class PsCostingPackage:
 
         Args:
             flow_type: Name of the flow type (e.g. ``"electricity"``).
-            cost_parameter: Parameter name giving the unit cost
-                (e.g. ``"electricity_cost"`` in $/kWh).
-            units: Units to convert the flow cost to after evaluation.
-            assign_units: Units to assign to the flow cost result.
+            cost_parameter_key: Parameter key with costs that is imported from the h5 (e.g. ``"electricity_cost"``).
+            parameter_units: Units to convert the cost parameter to
+            parameter_assign_units: Units to assign to cost parameter if there is none.
+            aggregate_units: Units for final aggregate flow after flow is multiplied by cost parameter (generally USD/year).
         """
         self.add_parameter(
             cost_parameter_key,
