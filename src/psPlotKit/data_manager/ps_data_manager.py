@@ -647,6 +647,28 @@ class PsDataManager(dict):
             ),
         )
 
+    def check_in_dir(self, key, directory):
+
+        if isinstance(key, str) and isinstance(directory, str):
+            return key == directory
+        if isinstance(directory, (tuple, list)):
+            for d in directory:
+                if isinstance(d, str) and self.check_in_dir(d, key):
+                    return True
+                else:
+                    for t in d:
+                        if isinstance(t, str) and self.check_in_dir(t, key):
+                            return True
+        else:
+            for k in key:
+                if isinstance(k, str) and self.check_in_dir(k, directory):
+                    return True
+                else:
+                    for t in k:
+                        if isinstance(t, str) and self.check_in_dir(t, directory):
+                            return True
+        return False
+
     def generate_data_stack(
         self,
         stack_keys,
@@ -654,6 +676,7 @@ class PsDataManager(dict):
         reduction_type,
         pad_missing_data=False,
         new_directory=None,
+        keys_to_process=None,
     ):
         """stacks data into single dataset from diffrent directories
         stack_keys: defines over which keys that data would be stacked, will auto identify indexes
@@ -662,21 +685,14 @@ class PsDataManager(dict):
         pad_missing_data: if global filter is available, and matches current directory will pad with specified value
         will add a new data set to unique directory with map, returns the newly generated keys
         new_directory: (optional) - custom directory to create for storing stacked data, this will be added to existing data directory
+        keys_to_process: (optional) - keys that should be stacked, if None, will stack all keys that match data_key and stack_keys criteria
         """
         dir_to_stack = []
         stack_idxs = []
         unique_dirs = {}
-        working_dirs = []
+
         if new_directory is None:
             new_directory = self.reduced_data
-
-        def search_dir(stack_keys, dkey):
-            for udir in stack_keys:
-                if dkey in udir:
-                    return udir
-                else:
-                    result = search_dir(udir, dkey)
-            return result
 
         def sort_idxs(idxs):
             try:
@@ -690,18 +706,23 @@ class PsDataManager(dict):
                 idx_type = str
             return sorted_idxs, idxs, idx_type
 
-        for udir in self.keys():
-            if new_directory not in udir and str(data_key) in str(
-                self._get_data_key(udir)
+        if keys_to_process is None:
+            keys_to_process = list(self.keys())
+        _keys_to_process = keys_to_process[:]
+        for working_directory in _keys_to_process:
+            # print(data_key, self._get_data_key(working_directory), working_directory)
+            if (
+                new_directory not in working_directory
+                and data_key == self._get_data_key(working_directory)
+                and all(dkey in str(working_directory) for dkey in stack_keys)
             ):
-
-                all_keys = all(dkey in str(udir) for dkey in stack_keys)
-
-                if all_keys and str(data_key) in str(udir):
-                    dir_to_stack.append(udir)
+                all_keys = all(dkey in str(working_directory) for dkey in stack_keys)
+                if all_keys:
+                    dir_to_stack.append(working_directory)
+                    keys_to_process.remove(working_directory)
                     ukey = None
                     work_dir = None
-                    for ud in udir:
+                    for ud in working_directory:
                         all_keys = all(dkey in str(ud) for dkey in stack_keys)
                         if all_keys:
                             ukey = ud
@@ -713,29 +734,32 @@ class PsDataManager(dict):
                     if ukey is None:
                         raise IndexError(
                             "Could not find index to stack over dir: {}, stack keys {}".format(
-                                stack_keys, udir
+                                stack_keys, working_directory
                             )
                         )
                     ukey = list(ukey)
                     for dkey in stack_keys:
-                        # print(stack_keys, dkey)
                         ukey.remove(dkey)
                     if len(ukey) == 1:
                         ukey = ukey[0]
-                    stack_dir = list(udir)[:]
+                    stack_dir = list(working_directory)[:]
                     try:
                         stack_dir.remove(data_key)
                     except ValueError:
-                        print("could not remove data key from dir", data_key, udir)
+                        print(
+                            "could not remove data key from dir",
+                            data_key,
+                            working_directory,
+                        )
                     stack_idxs.append(ukey)
                     if work_dir not in unique_dirs:
                         unique_dirs[work_dir] = {
-                            "dirs": [udir],
+                            "dirs": [working_directory],
                             "stack_dir": [stack_dir],
                             "idxs": [ukey],
                         }
                     else:
-                        unique_dirs[work_dir]["dirs"].append(udir)
+                        unique_dirs[work_dir]["dirs"].append(working_directory)
                         unique_dirs[work_dir]["stack_dir"].append(stack_dir)
                         unique_dirs[work_dir]["idxs"].append(ukey)
         if unique_dirs != {}:
@@ -803,6 +827,7 @@ class PsDataManager(dict):
                 if len(units) > 1:
                     _logger.info("Units are inconsistent, using dimensionless")
                     units = "dimensionless"
+
                 else:
                     units = units[0]
                 try:
@@ -817,6 +842,7 @@ class PsDataManager(dict):
                         stack_keys, "stacked_data_idxs", map_idxs, "dimensionless"
                     )
                     new_dir = [new_directory]
+
                     if uq is not None:
                         new_dir.append(uq)
 
@@ -844,7 +870,7 @@ class PsDataManager(dict):
                     _logger.error(
                         "Could not stack data for dir {}, key {}".format(uq, data_key)
                     )
-        return unique_dirs
+        return unique_dirs, keys_to_process
 
     def add_mask(self, directory, indexes, data_shape=None, shape="1D"):
         idx_data = PsData("filter_idx", "filter_idx", indexes, "dimensionless")
@@ -871,18 +897,21 @@ class PsDataManager(dict):
             raise TypeError("Reduction type {} not implemented".format(reduction_type))
         return r_idx, sd
 
-    def stack_all_data(self, stack_keys, pad_missing_data, stack_directory=None):
+    def stack_all_data(
+        self, stack_keys, pad_missing_data, stack_directory=None, keys_to_process=None
+    ):
         if stack_directory is None:
             stack_directory = self.reduced_data
         current_keys = self.data_keys[:]
         for data_key in current_keys:
             if str(stack_directory) not in str(data_key):
-                self.generate_data_stack(
+                _, keys_to_process = self.generate_data_stack(
                     stack_keys,
                     data_key,
                     reduction_type=None,
                     pad_missing_data=pad_missing_data,
                     new_directory=stack_directory,
+                    keys_to_process=keys_to_process,
                 )
 
     def reduce_data(
@@ -909,12 +938,17 @@ class PsDataManager(dict):
         if self.mask_data == True:
             mask_data = True
             self.mask_data = False
-        self.global_reduction_directory = self.generate_data_stack(
+        self.global_reduction_directory, keys_to_process = self.generate_data_stack(
             stack_keys, data_key, reduction_type, new_directory=directory
         )
 
         if stack_all_data:
-            self.stack_all_data(stack_keys, pad_missing_data, stack_directory=directory)
+            self.stack_all_data(
+                stack_keys,
+                pad_missing_data,
+                stack_directory=directory,
+                keys_to_process=keys_to_process,
+            )
         self.mask_data = mask_data
 
     def check_import_status(self, raise_error=False):
