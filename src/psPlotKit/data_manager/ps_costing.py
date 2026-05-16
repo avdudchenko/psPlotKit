@@ -52,6 +52,7 @@ Example
 """
 
 import difflib
+import time
 
 import numpy as np
 
@@ -526,17 +527,18 @@ class PsCostingManager:
                 after key registration.  Set to *False* if data is already
                 loaded.
         """
+
+        ts = time.time()
         self.data_manager._load_registered_data_files()
         self._discover_keys()
         self._check_discovery_status()
         self._register_parameters()
         self._register_discovered_keys()
         self._register_validation_keys()
-
         if load_data:
             self.data_manager.load_data(evaluate_expressions=False)
-
         self._register_zero_sentinel()
+
         self._build_group_expressions()
         self._build_flow_expressions()
         self._build_per_group_flow_expressions()
@@ -544,16 +546,14 @@ class PsCostingManager:
         self._build_per_group_formula_expressions()
         self._build_total_formula_expressions()
         self._build_fraction_expressions()
-
         self.data_manager.evaluate_expressions()
-
         _logger.info(
-            "Costing build complete - {} group(s), {} formula(e).".format(
+            "Costing build complete took {} seconds - {} group(s), {} formula(e).".format(
+                round(time.time() - ts, 2),
                 len(self.costing_groups),
                 len(self.costing_package.formulae),
             )
         )
-
         self._validate(error_on_failure=error_on_validation_failure)
 
     # ------------------------------------------------------------------
@@ -1166,10 +1166,15 @@ class PsCostingManager:
                     flow_type in self.costing_package.flow_costs
                     and group_flow_types.get(flow_type)
                 )
+
                 alias_map["{}_flow_cost".format(flow_type)] = (
                     gft_rk if has_cost else None
                 )
                 alias_map["aggregate_flow_cost_{}".format(flow_type)] = (
+                    gft_rk if has_cost else None
+                )
+                gft_rk = ("costing", group.name, "{}_flow".format(flow_type))
+                alias_map["aggregate_{}_flow".format(flow_type)] = (
                     gft_rk if has_cost else None
                 )
 
@@ -1199,7 +1204,7 @@ class PsCostingManager:
                 self._per_group_formula_keys.setdefault(fdef["return_key"], []).append(
                     group_rk
                 )
-                _logger.info("Registered per-group formula '{}'.".format(group_rk))
+                _logger.debug("Registered per-group formula '{}'.".format(group_rk))
 
     def _build_total_formula_expressions(self):
         """Build total (sum across groups) expressions for each formula.
