@@ -1041,3 +1041,140 @@ class TestAutoGenLims:
         assert ylim[0] == pytest.approx(10.0)
         assert ylim[1] == pytest.approx(50.0)
         fig.close()
+
+
+# ---------------------------------------------------------------------------
+# Panel and shared legend
+# ---------------------------------------------------------------------------
+
+
+class TestPanelAndSharedLegend:
+    def test_init_panel_sets_expected_shape_and_size(self):
+        fig = FigureGenerator()
+        fig.init_panel(
+            panel_shape=(2, 3), panel_size=(2.0, 1.5), sharex=True, sharey=True
+        )
+
+        assert fig.idx_totals == (2, 3)
+        width, height = fig.fig.get_size_inches()
+        assert width == pytest.approx(6.0)
+        assert height == pytest.approx(3.0)
+
+        # Flat and tuple indexing should resolve to the same axis.
+        assert fig.get_axis(4) is fig.get_axis((1, 1))
+        fig.close()
+
+    def test_flat_axis_index_works_on_multiplot_grid(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=2)
+
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [2, 3], label="B", ax_idx=3)
+
+        ax00 = fig.get_axis((0, 0))
+        ax11 = fig.get_axis((1, 1))
+        assert len(ax00.lines) == 1
+        assert len(ax11.lines) == 1
+        fig.close()
+
+    def test_add_shared_legend_top_deduplicates_labels(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=1, ncols=2)
+
+        fig.plot_line([1, 2], [1, 2], label="Series A", ax_idx=0)
+        fig.plot_line([1, 2], [2, 3], label="Series A", ax_idx=1)
+        fig.plot_line([1, 2], [3, 4], label="Series B", ax_idx=1)
+
+        legend = fig.add_shared_legend(loc="top")
+        labels = [text.get_text() for text in legend.get_texts()]
+
+        assert labels == ["Series A", "Series B"]
+        assert len(fig.fig.legends) == 1
+        fig.close()
+
+    def test_add_shared_legend_right_location(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=1, ncols=2)
+
+        fig.plot_line([1, 2], [1, 2], label="Left", ax_idx=0)
+        fig.plot_line([1, 2], [2, 3], label="Right", ax_idx=1)
+
+        legend = fig.add_shared_legend(loc="right", ncol=1)
+        assert legend is not None
+        assert len(legend.get_texts()) == 2
+        fig.close()
+
+    def test_sharex_defaults_to_small_vertical_panel_gap(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=3, ncols=1, sharex=True)
+
+        ax0 = fig.get_axis(0)
+        ax1 = fig.get_axis(1)
+        vertical_gap = ax0.get_position().y0 - ax1.get_position().y1
+
+        assert vertical_gap < 0.08
+        fig.close()
+
+    def test_sharey_defaults_to_small_horizontal_panel_gap(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=1, ncols=3, sharey=True)
+
+        ax0 = fig.get_axis(0)
+        ax1 = fig.get_axis(1)
+        horizontal_gap = ax1.get_position().x0 - ax0.get_position().x1
+
+        assert horizontal_gap < 0.08
+        fig.close()
+
+    def test_add_shared_legend_top_auto_positions_close_to_panel(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=1, ncols=2)
+
+        # Many labels in one column force a tall legend.
+        for i in range(8):
+            fig.plot_line([1, 2], [i, i + 1], label=f"Series {i}", ax_idx=0)
+
+        legend = fig.add_shared_legend(loc="top", ncol=1)
+        fig.fig.canvas.draw()
+
+        renderer = fig.fig.canvas.get_renderer()
+        legend_bbox = legend.get_window_extent(renderer=renderer).transformed(
+            fig.fig.transFigure.inverted()
+        )
+        panel_top = max(axis.get_position().y1 for axis in fig._iter_axes())
+        gap = legend_bbox.y0 - panel_top
+
+        assert gap >= 0
+        assert gap < 0.04
+        assert legend_bbox.y1 <= 1.0
+        fig.close()
+
+    def test_nonshared_vertical_labels_do_not_overlap_adjacent_panel(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=1, sharex=False)
+
+        fig.get_axis(0).set_xlabel("Very Long X Label For Top Panel")
+        fig.get_axis(1).set_xlabel("Bottom X Label")
+        fig.fig.canvas.draw()
+
+        renderer = fig.fig.canvas.get_renderer()
+        top_xlabel_bbox = fig.get_axis(0).xaxis.label.get_window_extent(renderer)
+        bottom_axes_bbox = fig.get_axis(1).get_window_extent(renderer)
+
+        assert not top_xlabel_bbox.overlaps(bottom_axes_bbox)
+        fig.close()
+
+    def test_nonshared_horizontal_labels_do_not_overlap_adjacent_panel(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=1, ncols=2, sharey=False)
+
+        fig.get_axis(0).set_ylabel("Very Long Y Label For Left Panel")
+        fig.get_axis(1).set_ylabel("Right Y Label")
+        fig.fig.canvas.draw()
+
+        renderer = fig.fig.canvas.get_renderer()
+        left_ylabel_bbox = fig.get_axis(0).yaxis.label.get_window_extent(renderer)
+        right_axes_bbox = fig.get_axis(1).get_window_extent(renderer)
+
+        assert not left_ylabel_bbox.overlaps(right_axes_bbox)
+        fig.close()

@@ -137,7 +137,7 @@ class BreakDownPlotter:
                     return True
             else:
                 for di in d:
-                    if isinstance(di, str):
+                    if isinstance(di, (str, int, float)):
                         if key == di:
                             return True
                     else:
