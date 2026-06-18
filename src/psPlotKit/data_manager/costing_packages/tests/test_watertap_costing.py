@@ -299,7 +299,9 @@ def test_complex():
 
     # lets create costing pacakage
     package = WaterTapCostingPackage(
-        costing_block="costing", validation_key="costing.LCOW"
+        costing_block="costing",
+        validation_key="costing.LCOW",
+        sec_validation_key="costing.SEC",
     )
     package.register_product_flow("avg_product_flow_rate")
 

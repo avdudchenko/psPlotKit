@@ -6,7 +6,7 @@ class WaterTapCostingPackage(PsCostingPackage):
         self,
         costing_block="fs.costing",
         validation_key="fs.costing.LCOW",
-        sec_validation_key="fs.costing.specific_energy_consumption",
+        sec_validation_key="fs.costing.SEC",
     ):
         super().__init__(costing_block=costing_block)
         self.costing_package_name = "watertap"
