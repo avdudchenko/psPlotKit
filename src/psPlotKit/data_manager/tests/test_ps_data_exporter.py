@@ -399,3 +399,195 @@ class TestFirstKeyParameter:
             headers = next(reader)
 
         assert "metric_2" in headers[0]
+
+
+class TestNestedTupleProcessing:
+    def test_nested_tuple_keys_flattened_in_header(self, tmp_path):
+        """Nested tuple keys are flattened for multi-row headers."""
+        dm = PsDataManager()
+        dm.PsDataImportInstances = []
+        dm.add_data(
+            "dir_a",
+            ("costing", ("stage 1", "pump"), "LCOW"),
+            PsData(("costing", ("stage 1", "pump"), "LCOW"), "test", [150.0]),
+        )
+        dm.add_data(
+            "dir_a",
+            "simple_key",
+            PsData("Simple", "test", [50.0]),
+        )
+
+        save_path = str(tmp_path / "nested.csv")
+        exporter = PsDataExporter(dm, save_path)
+        exporter.export()
+
+        with open(save_path, "r") as f:
+            reader = csv.reader(f)
+            header_rows = [next(reader) for _ in range(4)]
+
+        assert len(header_rows) == 4
+        assert header_rows[0] == ["costing", ""]
+        assert header_rows[1] == ["stage 1", ""]
+        assert header_rows[2] == ["pump", ""]
+        assert "LCOW" in header_rows[3][0] and "Simple" in header_rows[3][1]
+
+    def test_nested_tuple_key_matching_in_export_keys(self, tmp_path):
+        """export_keys matches elements within nested tuples."""
+        dm = PsDataManager()
+        dm.PsDataImportInstances = []
+        dm.add_data(
+            "dir_a",
+            ("costing", ("stage 1", "pump"), "LCOW"),
+            PsData("pump LCOW", "test", [150.0]),
+        )
+        dm.add_data(
+            "dir_a",
+            ("data", ("stage 2", "other"), "value"),
+            PsData("other value", "test", [200.0]),
+        )
+
+        save_path = str(tmp_path / "nested_filter.csv")
+        exporter = PsDataExporter(dm, save_path, export_keys=["stage 1"])
+        exporter.export()
+
+        with open(save_path, "r") as f:
+            reader = csv.reader(f)
+            header_rows = [next(reader) for _ in range(4)]
+
+        assert len(header_rows[3]) == 1
+        assert "LCOW" in header_rows[3][0]
+
+
+class TestKeyFiltering:
+    def test_export_keys_filters_by_partial_match(self, tmp_path):
+        """export_keys filters keys by partial match (tuple elements)."""
+        dm = PsDataManager()
+        dm.PsDataImportInstances = []
+        dm.add_data(
+            "dir_a",
+            "water_recovery",
+            PsData("Water recovery", "test", [0.85]),
+        )
+        dm.add_data(
+            "dir_a",
+            ("costing", "pump"),
+            PsData("pump", "test", [100.0]),
+        )
+        dm.add_data(
+            "dir_a",
+            ("data_a", "data_b"),
+            PsData("data_b", "test", [200.0]),
+        )
+
+        save_path = str(tmp_path / "filtered.csv")
+        exporter = PsDataExporter(
+            dm, save_path, export_keys=["water_recovery", "costing"]
+        )
+        exporter.export()
+
+        with open(save_path, "r") as f:
+            reader = csv.reader(f)
+            header_rows = [next(reader) for _ in range(2)]
+
+        assert len(header_rows[1]) == 2
+        assert "Water recovery" in header_rows[1][0]
+        assert "pump" in header_rows[1][1]
+
+    def test_exact_keys_filters_by_exact_match(self, tmp_path):
+        """exact_keys filters keys by exact match only."""
+        dm = PsDataManager()
+        dm.PsDataImportInstances = []
+        dm.add_data(
+            "dir_a",
+            "water_recovery",
+            PsData("Water recovery", "test", [0.85]),
+        )
+        dm.add_data(
+            "dir_a",
+            ("costing", "pump"),
+            PsData("pump", "test", [100.0]),
+        )
+        dm.add_data(
+            "dir_a",
+            ("data_a", "data_b"),
+            PsData("data_b", "test", [200.0]),
+        )
+
+        save_path = str(tmp_path / "exact.csv")
+        exporter = PsDataExporter(
+            dm, save_path, exact_keys=["water_recovery", ("costing", "pump")]
+        )
+        exporter.export()
+
+        with open(save_path, "r") as f:
+            reader = csv.reader(f)
+            header_rows = [next(reader) for _ in range(2)]
+
+        assert len(header_rows[1]) == 2
+        assert "Water recovery" in header_rows[1][0]
+        assert "pump" in header_rows[1][1]
+
+    def test_exact_keys_takes_precedence_over_export_keys(self, tmp_path):
+        """exact_keys takes precedence over export_keys."""
+        dm = PsDataManager()
+        dm.PsDataImportInstances = []
+        dm.add_data(
+            "dir_a",
+            "key_a",
+            PsData("Key A", "test", [1.0]),
+        )
+        dm.add_data(
+            "dir_a",
+            ("costing", "pump"),
+            PsData("pump", "test", [100.0]),
+        )
+
+        save_path = str(tmp_path / "precedence.csv")
+        exporter = PsDataExporter(
+            dm, save_path, export_keys=["key_a"], exact_keys=[("costing", "pump")]
+        )
+        exporter.export()
+
+        with open(save_path, "r") as f:
+            reader = csv.reader(f)
+            header_rows = [next(reader) for _ in range(2)]
+
+        assert len(header_rows[1]) == 1
+        assert "pump" in header_rows[1][0]
+
+    def test_no_filter_exports_all_non_internal_keys(self, manual_single_dm, tmp_path):
+        """Without filter, all non-internal keys are exported."""
+        save_path = str(tmp_path / "no_filter.csv")
+        exporter = PsDataExporter(manual_single_dm, save_path)
+        exporter.export()
+
+        with open(save_path, "r") as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+
+        assert len(headers) == 2
+
+    def test_export_keys_via_manager_method(self, tmp_path):
+        """export_data_to_csv on PsDataManager accepts export_keys parameter."""
+        dm = PsDataManager()
+        dm.PsDataImportInstances = []
+        dm.add_data(
+            "dir_a",
+            ("costing", "pump"),
+            PsData("pump", "test", [100.0]),
+        )
+        dm.add_data(
+            "dir_a",
+            ("data_a", "data_b"),
+            PsData("data_b", "test", [200.0]),
+        )
+
+        save_path = str(tmp_path / "via_manager.csv")
+        dm.export_data_to_csv(save_path, export_keys=["costing"])
+
+        with open(save_path, "r") as f:
+            reader = csv.reader(f)
+            header_rows = [next(reader) for _ in range(2)]
+
+        assert len(header_rows[1]) == 1
+        assert "pump" in header_rows[1][0]
