@@ -465,7 +465,7 @@ class PsDataManager(dict):
             data_keys = self.data_keys[:]
         return data_keys
 
-    def export_data_to_csv(self, save_location):
+    def export_data_to_csv(self, save_location, first_key=None):
         """Export all loaded data to CSV file(s).
 
         Convenience wrapper around :class:`PsDataExporter`.  If this
@@ -478,6 +478,9 @@ class PsDataManager(dict):
         save_location : str
             File path for single-directory export (e.g. ``"results.csv"``)
             or folder path for multi-directory export.
+        first_key : str, optional
+            Data key that should always appear as the first column in the
+            exported CSV files.
 
         Returns
         -------
@@ -486,7 +489,7 @@ class PsDataManager(dict):
         """
         from psPlotKit.data_manager.ps_data_exporter import PsDataExporter
 
-        exporter = PsDataExporter(self, save_location)
+        exporter = PsDataExporter(self, save_location, first_key)
         return exporter.export()
 
     def display_loaded_contents(self):

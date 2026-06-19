@@ -352,3 +352,50 @@ class TestExportDataToCsvMethod:
         assert len(headers) == 2
         assert len(rows) == 3
         assert float(rows[0][0]) == pytest.approx(1.0)
+
+
+class TestFirstKeyParameter:
+    def test_first_key_places_column_first_single_dir(self, manual_single_dm, tmp_path):
+        save_path = str(tmp_path / "first_key.csv")
+        exporter = PsDataExporter(manual_single_dm, save_path, first_key="metric_2")
+        exporter.export()
+
+        with open(save_path, "r") as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+
+        assert "metric_2" in headers[0]
+        assert "metric_1" in headers[1]
+
+    def test_first_key_places_column_first_multi_dir(self, manual_multi_dm, tmp_path):
+        save_folder = str(tmp_path / "first_key_export")
+        exporter = PsDataExporter(manual_multi_dm, save_folder, first_key="metric_2")
+        written = exporter.export()
+
+        for path in written:
+            with open(path, "r") as f:
+                reader = csv.reader(f)
+                headers = next(reader)
+            assert "metric_2" in headers[0]
+
+    def test_first_key_not_found_logs_warning(self, manual_single_dm, tmp_path):
+        save_path = str(tmp_path / "missing_key.csv")
+        exporter = PsDataExporter(manual_single_dm, save_path, first_key="nonexistent")
+        exporter.export()
+
+        with open(save_path, "r") as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+
+        assert len(headers) == 2
+        assert "metric_1" in headers[0]
+
+    def test_first_key_via_manager_method(self, manual_single_dm, tmp_path):
+        save_path = str(tmp_path / "manager_first_key.csv")
+        written = manual_single_dm.export_data_to_csv(save_path, first_key="metric_2")
+
+        with open(written[0], "r") as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+
+        assert "metric_2" in headers[0]

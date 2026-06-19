@@ -18,6 +18,10 @@ class PsDataExporter:
     save_location : str
         File path (single directory) or folder path (multiple directories)
         where the CSV output will be written.
+    first_key : str, optional
+        Data key that should always appear as the first column in the exported
+        CSV files. If provided and the key exists in the data, it will be
+        moved to the front of the column order.
 
     Notes
     -----
@@ -31,9 +35,10 @@ class PsDataExporter:
       :meth:`PsData.set_label`).
     """
 
-    def __init__(self, ps_data_manager, save_location):
+    def __init__(self, ps_data_manager, save_location, first_key=None):
         self.ps_data_manager = ps_data_manager
         self.save_location = save_location
+        self.first_key = first_key
 
     @staticmethod
     def _ensure_csv_extension(path):
@@ -100,6 +105,40 @@ class PsDataExporter:
             grouped[dir_key].append((data_key, ps_data))
 
         return grouped
+
+    def _reorder_with_first(self, data_items):
+        """Reorder data items to place first_key at the front if specified.
+
+        Parameters
+        ----------
+        data_items : list[tuple]
+            List of (data_key, PsData) pairs.
+
+        Returns
+        -------
+        list[tuple]
+            Reordered list with first_key at the front if applicable.
+        """
+        if not self.first_key:
+            return data_items
+
+        reordered = []
+        first_item = None
+        for item in data_items:
+            if item[0] == self.first_key:
+                first_item = item
+            else:
+                reordered.append(item)
+
+        if first_item:
+            reordered.insert(0, first_item)
+            _logger.info("Placed '{}' as first column".format(self.first_key))
+        else:
+            _logger.warning(
+                "first_key '{}' not found in data keys".format(self.first_key)
+            )
+
+        return reordered
 
     def _build_header(self, data_items):
         """Build a CSV header row from a list of (data_key, PsData) pairs.
@@ -208,6 +247,7 @@ class PsDataExporter:
 
         _logger.info("Single directory detected, exporting to single CSV file")
         data_items = list(grouped.values())[0]
+        data_items = self._reorder_with_first(data_items)
         headers = self._build_header(data_items)
         rows = self._build_rows(data_items)
         _logger.info(
@@ -273,6 +313,7 @@ class PsDataExporter:
         for dir_key, data_items in grouped.items():
             filename = self._dir_key_to_filename(dir_key) + ".csv"
             file_path = os.path.join(folder, filename)
+            data_items = self._reorder_with_first(data_items)
             headers = self._build_header(data_items)
             rows = self._build_rows(data_items)
             _logger.info(
