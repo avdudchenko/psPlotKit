@@ -408,10 +408,15 @@ class FigureGenerator:
         ncols=1,
         sharex=False,
         sharey=False,
+        panel_shape=None,
+        panel_size=None,
         twinx=False,
         twiny=False,
         grid=None,
         subplot_adjust=None,
+        wspace=None,
+        hspace=None,
+        constrained_layout=False,
         projection=None,
         **kwargs,
     ):
@@ -425,15 +430,28 @@ class FigureGenerator:
             ncols: Number of subplot columns.
             sharex: Whether subplots share the x-axis.
             sharey: Whether subplots share the y-axis.
+            panel_shape: Optional (rows, cols) tuple overriding nrows/ncols.
+            panel_size: Optional (width, height) in inches for each panel.
+                If set, overall figure size becomes
+                ``(panel_width * ncols, panel_height * nrows)``.
             twinx: If True, create a twin x-axis.
             twiny: If True, create a twin y-axis.
             grid: If set, overrides ncols and enables shared y-axis.
             subplot_adjust: Horizontal spacing between subplots.
+            wspace: Width space between subplots.
+            hspace: Height space between subplots.
+            constrained_layout: Enable matplotlib constrained layout.
             projection: Axes projection type (e.g., '3d').
         """
+        if panel_shape is not None:
+            nrows, ncols = panel_shape
         if grid is not None:
             sharey = True
             ncols = grid
+        if panel_size is not None:
+            panel_width, panel_height = panel_size
+            width = panel_width * ncols
+            height = panel_height * nrows
         self.projection = projection
         if projection == None:
             self.mode_3d = False
@@ -442,6 +460,7 @@ class FigureGenerator:
                 ncols,
                 sharex=sharex,
                 sharey=sharey,
+                constrained_layout=constrained_layout,
             )
         else:
             self.mode_3d = True
@@ -452,6 +471,7 @@ class FigureGenerator:
                 sharex=sharex,
                 sharey=sharey,
                 subplot_kw={"projection": projection},
+                constrained_layout=constrained_layout,
             )
         self.idx_totals = (nrows, ncols)
         self.sharex = sharex
@@ -470,11 +490,109 @@ class FigureGenerator:
         if twiny:
             self.ax = [self.ax[0], self.ax[0].twinx()]
             self.twiny = True
-        if subplot_adjust is not None:
-            self.fig.subplots_adjust(wspace=subplot_adjust)
+
+        # Default subplot spacing policy:
+        # - shared axes: keep panels close.
+        # - non-shared axes: leave larger gaps so axis labels do not collide.
+        auto_wspace = None
+        auto_hspace = None
+        if not constrained_layout:
+            if sharey and ncols > 1 and wspace is None and subplot_adjust is None:
+                auto_wspace = 0.05
+            elif not sharey and ncols > 1 and wspace is None and subplot_adjust is None:
+                auto_wspace = 0.35
+            if sharex and nrows > 1 and hspace is None:
+                auto_hspace = 0.05
+            elif not sharex and nrows > 1 and hspace is None:
+                auto_hspace = 0.45
+
+        final_wspace = wspace
+        if final_wspace is None and subplot_adjust is not None:
+            final_wspace = subplot_adjust
+        if final_wspace is None:
+            final_wspace = auto_wspace
+
+        final_hspace = hspace if hspace is not None else auto_hspace
+
+        if not constrained_layout and (
+            final_wspace is not None or final_hspace is not None
+        ):
+            self.fig.subplots_adjust(
+                wspace=(
+                    final_wspace
+                    if final_wspace is not None
+                    else self.fig.subplotpars.wspace
+                ),
+                hspace=(
+                    final_hspace
+                    if final_hspace is not None
+                    else self.fig.subplotpars.hspace
+                ),
+            )
         self.fig.set_dpi(dpi)
         self.fig.set_size_inches(width, height, forward=True)
         return self
+
+    def init_panel(
+        self,
+        panel_shape=(1, 1),
+        panel_size=(3.25, 3.25),
+        dpi=150,
+        sharex=False,
+        sharey=False,
+        **kwargs,
+    ):
+        """Initialize a subplot panel layout using per-panel dimensions.
+
+        Args:
+            panel_shape: (rows, cols) panel shape.
+            panel_size: (width, height) of each panel in inches.
+            dpi: Figure DPI.
+            sharex: Whether subplots share x-axis.
+            sharey: Whether subplots share y-axis.
+
+        Returns:
+            Self for fluent chaining.
+        """
+        nrows, ncols = panel_shape
+        panel_width, panel_height = panel_size
+        return self.init_figure(
+            nrows=nrows,
+            ncols=ncols,
+            width=panel_width * ncols,
+            height=panel_height * nrows,
+            dpi=dpi,
+            sharex=sharex,
+            sharey=sharey,
+            panel_shape=panel_shape,
+            panel_size=panel_size,
+            **kwargs,
+        )
+
+    def _normalize_ax_idx(self, idx):
+        """Normalize axis selection to the internal axis representation."""
+        if hasattr(idx, "plot"):
+            return idx
+        if isinstance(idx, tuple):
+            return idx
+        if isinstance(idx, (int, np.integer)):
+            if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
+                ncols = self.idx_totals[1]
+                return (int(idx) // ncols, int(idx) % ncols)
+            return int(idx)
+        raise TypeError("Unsupported axis index type: {}".format(type(idx)))
+
+    def _iter_axes(self):
+        """Yield all axes in row-major order."""
+        if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
+            for row in self.ax:
+                for axis in row:
+                    yield axis
+        elif self.idx_totals[0] == 1 and self.idx_totals[1] == 1:
+            yield self.ax[0]
+        else:
+            for axis in self.ax:
+                yield axis
 
     def get_color(self, ax, val_update=0):
         """Get the current color index for the given axis and optionally advance it.
@@ -486,12 +604,13 @@ class FigureGenerator:
         Returns:
             Integer color index into the current colormap.
         """
+        norm_ax = self._normalize_ax_idx(ax)
         if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
-            self.current_color_index[ax[0]][ax[1]] += val_update
-            return int(self.current_color_index[ax[0]][ax[1]])
+            self.current_color_index[norm_ax[0]][norm_ax[1]] += val_update
+            return int(self.current_color_index[norm_ax[0]][norm_ax[1]])
         else:
-            self.current_color_index[ax] += val_update
-            return int(self.current_color_index[ax])
+            self.current_color_index[norm_ax] += val_update
+            return int(self.current_color_index[norm_ax])
 
     def plot_bar(
         self,
@@ -754,7 +873,7 @@ class FigureGenerator:
                 zorder=zorder,
                 markersize=markersize,
             )
-            for value, marker in marker_dict.items():
+            for i, (value, marker) in enumerate(marker_dict.items()):
                 plot_range = np.where(marker_overlay == value)[0]
 
                 if len(plot_range) > 0:
@@ -2096,6 +2215,130 @@ class FigureGenerator:
             bbox_to_anchor=bbox_to_anchor,
         )
 
+    def add_shared_legend(
+        self,
+        loc="top",
+        fontsize=9,
+        ncol=None,
+        bbox_to_anchor=None,
+        deduplicate=True,
+        reverse_legend=False,
+        ax_indices=None,
+        **kwargs,
+    ):
+        """Add a figure-level legend shared across multiple subplots.
+
+        Args:
+            loc: Shared legend placement key. One of ``top``, ``bottom``,
+                ``right``, or any matplotlib legend location string.
+            fontsize: Legend font size.
+            ncol: Number of legend columns. Defaults to number of labels.
+            bbox_to_anchor: Explicit legend anchor override.
+            deduplicate: If True, remove duplicate labels while preserving
+                insertion order.
+            reverse_legend: If True, reverse final legend order.
+            ax_indices: Optional iterable of axis indices to include.
+
+        Returns:
+            The created matplotlib Legend instance.
+        """
+        if ax_indices is None:
+            axes = list(self._iter_axes())
+        else:
+            axes = [self.get_axis(ax_idx) for ax_idx in ax_indices]
+
+        handles = []
+        labels = []
+        for axis in axes:
+            axis_handles, axis_labels = axis.get_legend_handles_labels()
+            handles.extend(axis_handles)
+            labels.extend(axis_labels)
+
+        if deduplicate:
+            unique_handles = []
+            unique_labels = []
+            seen = set()
+            for handle, label in zip(handles, labels):
+                if label not in seen and label != "":
+                    seen.add(label)
+                    unique_handles.append(handle)
+                    unique_labels.append(label)
+            handles, labels = unique_handles, unique_labels
+
+        if reverse_legend:
+            handles, labels = handles[::-1], labels[::-1]
+
+        if ncol is None:
+            ncol = max(1, len(labels))
+
+        loc_map = {
+            "top": ("upper center", (0.5, 1.02)),
+            "bottom": ("lower center", (0.5, -0.02)),
+            "right": ("center left", (1.02, 0.5)),
+        }
+
+        if loc in loc_map:
+            mpl_loc, default_anchor = loc_map[loc]
+            anchor = bbox_to_anchor if bbox_to_anchor is not None else default_anchor
+        else:
+            mpl_loc = loc
+            anchor = bbox_to_anchor
+
+        legend = self.fig.legend(
+            handles,
+            labels,
+            frameon=False,
+            loc=mpl_loc,
+            ncol=ncol,
+            prop={"size": fontsize},
+            labelspacing=0.2,
+            columnspacing=0.8,
+            handlelength=1,
+            handleheight=1,
+            bbox_to_anchor=anchor,
+        )
+
+        if loc == "top" and bbox_to_anchor is None:
+            self._auto_adjust_top_shared_legend(legend)
+
+        return legend
+
+    def _auto_adjust_top_shared_legend(self, legend, gap=0.01, max_top=0.995):
+        """Place top shared legend close to panels, adjusting top margin if needed."""
+        self.fig.canvas.draw()
+        renderer = self.fig.canvas.get_renderer()
+        legend_bbox = legend.get_window_extent(renderer=renderer).transformed(
+            self.fig.transFigure.inverted()
+        )
+        legend_height = legend_bbox.height
+
+        panel_top = max(axis.get_position().y1 for axis in self._iter_axes())
+        max_panel_top = max_top - (legend_height + gap)
+
+        if panel_top > max_panel_top:
+            self.fig.subplots_adjust(top=max_panel_top)
+            self.fig.canvas.draw()
+            panel_top = max(axis.get_position().y1 for axis in self._iter_axes())
+
+        target_anchor_y = panel_top + gap + legend_height
+        legend.set_bbox_to_anchor(
+            (0.5, target_anchor_y), transform=self.fig.transFigure
+        )
+        self.fig.canvas.draw()
+
+        # Renderers can slightly shift legend extents; correct once so the
+        # legend remains above the panel with the requested gap.
+        corrected_bbox = legend.get_window_extent(
+            renderer=self.fig.canvas.get_renderer()
+        ).transformed(self.fig.transFigure.inverted())
+        current_panel_top = max(axis.get_position().y1 for axis in self._iter_axes())
+        current_gap = corrected_bbox.y0 - current_panel_top
+        if current_gap < gap:
+            desired_panel_top = corrected_bbox.y0 - gap
+            self.fig.subplots_adjust(
+                top=max(0.1, min(desired_panel_top, self.fig.subplotpars.top))
+            )
+
     def get_axis(self, idx):
         """Return the matplotlib axes object for the given index.
 
@@ -2105,10 +2348,13 @@ class FigureGenerator:
         Returns:
             Matplotlib Axes object.
         """
+        norm_idx = self._normalize_ax_idx(idx)
+        if hasattr(norm_idx, "plot"):
+            return norm_idx
         if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
-            return self.ax[idx[0], idx[1]]
+            return self.ax[norm_idx[0], norm_idx[1]]
         else:
-            return self.ax[idx]
+            return self.ax[norm_idx]
 
     def remove_ticks(self, ax_idx=0, y_axis=None, x_axis=None):
         """Hide tick marks and labels for the specified axes.

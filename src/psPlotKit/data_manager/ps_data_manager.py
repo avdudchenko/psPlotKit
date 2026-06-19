@@ -825,8 +825,15 @@ class PsDataManager(dict):
                     map_idxs = temp_map_idxs
                 units = np.unique(map_units)
                 if len(units) > 1:
-                    _logger.info("Units are inconsistent, using dimensionless")
-                    units = "dimensionless"
+                    _map_units = []
+                    for k in range(len(map_units)):
+                        true_sum = np.nansum(map_data[k])
+                        if true_sum != 0:
+                            _map_units.append(map_units[k])
+                    units = np.unique(_map_units)
+                    if len(units) > 1:
+                        _logger.info("Units are inconsistent, using dimensionless")
+                        units = "dimensionless"
 
                 else:
                     units = units[0]
@@ -867,9 +874,10 @@ class PsDataManager(dict):
                     new_keys.append(data_key)
                     new_keys.append(stack_keys)
                 except:
-                    _logger.error(
-                        "Could not stack data for dir {}, key {}".format(uq, data_key)
-                    )
+                    pass
+                    # _logger.error(
+                    #     "Could not stack data for dir {}, key {}".format(uq, data_key)
+                    # )
         return unique_dirs, keys_to_process
 
     def add_mask(self, directory, indexes, data_shape=None, shape="1D"):

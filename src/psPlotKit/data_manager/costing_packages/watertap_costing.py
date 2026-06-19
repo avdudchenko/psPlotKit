@@ -2,7 +2,12 @@ from psPlotKit.data_manager.ps_costing import PsCostingPackage
 
 
 class WaterTapCostingPackage(PsCostingPackage):
-    def __init__(self, costing_block="fs.costing", validation_key="fs.costing.LCOW"):
+    def __init__(
+        self,
+        costing_block="fs.costing",
+        validation_key="fs.costing.LCOW",
+        sec_validation_key="fs.costing.SEC",
+    ):
         super().__init__(costing_block=costing_block)
         self.costing_package_name = "watertap"
 
@@ -41,7 +46,9 @@ class WaterTapCostingPackage(PsCostingPackage):
             lambda ek: ek.total_capital_cost * ek.capital_recovery_factor
             + ek.total_operating_cost,
         )
+
         self.add_validation("LCOW", file_key=validation_key, rtol=1e-4)
+        self.add_validation("SEC", file_key=sec_validation_key, rtol=1e-4)
         self.register_fraction("LCOW")
         self.register_fraction("LCOW_opex", "LCOW")
         self.register_fraction("LCOW_capex", "LCOW")
@@ -50,6 +57,11 @@ class WaterTapCostingPackage(PsCostingPackage):
         self, file_key="fs.product.properties[0.0].flow_vol_phase[Liq]"
     ):
         self.add_parameter("product_flow", file_key=file_key)
+        self.add_formula(
+            "SEC",
+            lambda ek: (ek.aggregate_electricity_flow) / (ek.product_flow),
+            units="kWh/m**3",
+        )
         self.add_formula(
             "LCOW",
             lambda ek: (ek.total_annualized_cost)
