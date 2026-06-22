@@ -1,4 +1,5 @@
 import os
+import re
 import csv
 import numpy as np
 from psPlotKit.util.logger import define_logger
@@ -31,6 +32,9 @@ class PsDataExporter:
         List of keys to include in export with exact matching. The entire key
         (including all tuple elements) must match exactly. If specified, this
         takes precedence over export_keys.
+    skip_zero_data : bool, optional
+        If True, columns whose data are all zeros are excluded from export.
+        Defaults to False so existing behavior is preserved.
 
     Notes
     -----
@@ -41,7 +45,9 @@ class PsDataExporter:
       CSV file inside that folder.
     * Column headers are built from each :class:`PsData` object's
       ``data_label`` and ``mpl_units`` attributes (set by
-      :meth:`PsData.set_label`).
+      :meth:`PsData.set_label`).  LaTeX/math-mode markers are removed
+      from ``mpl_units`` so that headers contain plain text (e.g.
+      ``$/m^3`` instead of ``$\\$$/$m^3$``).
     * Internal keys (e.g., ``_zero_sentinel``) are automatically excluded
       from export.
     * For tuple data keys (e.g., ``("costing", "pump")``), multi-row headers
@@ -56,12 +62,14 @@ class PsDataExporter:
         first_key=None,
         export_keys=None,
         exact_keys=None,
+        skip_zero_data=False,
     ):
         self.ps_data_manager = ps_data_manager
         self.save_location = save_location
         self.first_key = first_key
         self.export_keys = export_keys
         self.exact_keys = exact_keys
+        self.skip_zero_data = skip_zero_data
 
     @staticmethod
     def _ensure_csv_extension(path):
@@ -76,6 +84,37 @@ class PsDataExporter:
         if path.endswith(".csv"):
             return path[:-4]
         return path
+
+    @staticmethod
+    def _clean_unit_for_export(units):
+        """Remove matplotlib/LaTeX math formatting from a unit string.
+
+        :class:`PsData.set_label` wraps unit tokens in math mode for
+        matplotlib rendering (e.g. ``$\\$$`` for a dollar sign,
+        ``$m^3$`` for an exponent).  CSV exports should contain plain
+        text such as ``$/m^3`` instead.
+
+        Parameters
+        ----------
+        units : str
+            The unit string as stored in ``PsData.mpl_units``.
+
+        Returns
+        -------
+        str
+            Unit string with LaTeX/math-mode markers removed.
+        """
+        if not units or units == "-":
+            return units
+
+        # Unwrap math-mode exponents first, e.g. $m^3$ -> m^3
+        units = re.sub(r"\$([^\$]*\^[^\$]*)\$", r"\1", units)
+        # USD/kUSD/MUSD math-mode dollar signs: $\$$ -> $, k$\$$ -> k$, etc.
+        units = re.sub(r"([kM]?)\$\s*\\\$\s*\$", r"\1$", units)
+        # Drop any remaining LaTeX escape backslashes
+        units = units.replace("\\", "")
+
+        return units
 
     def export(self):
         """Export the data manager contents to CSV.
@@ -133,11 +172,41 @@ class PsDataExporter:
             if not self._should_export_key(data_key):
                 continue
 
+            # Skip all-zero columns when requested
+            if self.skip_zero_data and self._is_zero_data(ps_data):
+                _logger.info(
+                    "Skipping '{}': all values are zero".format(data_key)
+                )
+                continue
+
             if dir_key not in grouped:
                 grouped[dir_key] = []
             grouped[dir_key].append((data_key, ps_data))
 
         return grouped
+
+    def _is_zero_data(self, ps_data):
+        """Return True if every value in *ps_data* is exactly zero.
+
+        Empty arrays are not considered all-zero.
+
+        Parameters
+        ----------
+        ps_data : PsData
+            The data object to inspect.
+
+        Returns
+        -------
+        bool
+            True if the data array is non-empty and all elements are 0.
+        """
+        data = ps_data.data
+        if data is None:
+            return False
+        arr = np.asarray(data)
+        if arr.size == 0:
+            return False
+        return np.all(arr == 0)
 
     def _should_export_key(self, data_key):
         """Check if a data key should be exported based on export_keys/exact_keys filters.
@@ -278,7 +347,7 @@ class PsDataExporter:
         headers = []
         for _, ps_data in data_items:
             label = ps_data.data_label
-            units = getattr(ps_data, "mpl_units", "-")
+            units = self._clean_unit_for_export(getattr(ps_data, "mpl_units", "-"))
             if units and units != "-":
                 header = "{} ({})".format(label, units)
             else:
@@ -341,7 +410,7 @@ class PsDataExporter:
 
         for idx, (data_key, ps_data) in enumerate(data_items):
             label = ps_data.data_label
-            units = getattr(ps_data, "mpl_units", "-")
+            units = self._clean_unit_for_export(getattr(ps_data, "mpl_units", "-"))
 
             flat_key = flattened_keys[idx]
 
