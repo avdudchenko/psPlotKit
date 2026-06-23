@@ -169,13 +169,44 @@ class PsData:
             custom_units = CustomUnits()
         self.custom_units = custom_units.get_units_dict()
 
+    def _raise_unit_error(
+        self, error, operation, requested_units=None, other=None
+    ):
+        """Build and raise an enhanced unit error preserving the original type.
+
+        The raised exception keeps the same Python type as *error* so existing
+        ``except ValueError`` / ``except LookupError`` blocks continue to work,
+        but the message now includes the data_key and data_type so users can
+        identify which data triggered the incompatible unit problem.
+        """
+        msg = "Unit error for data_key={!r}, data_type={!r}. Operation: {}. ".format(
+            self.data_key, self.data_type, operation
+        )
+        if requested_units is not None:
+            msg += "Requested units: {!r}. ".format(requested_units)
+        if other is not None:
+            if isinstance(other, PsData):
+                msg += "Other operand: data_key={!r}, data_type={!r}. ".format(
+                    other.data_key, other.data_type
+                )
+            else:
+                msg += "Other operand: {!r}. ".format(other)
+        msg += "Original error: {}: {}".format(type(error).__name__, error)
+        _logger.error(msg)
+        raise type(error)(msg) from error
+
     def _assign_units(self, manual_conversion=1):
         if self.data_is_numbers:
             self.data = self.data * manual_conversion
         qsunits = self._get_qs_unit()
-        self.data_with_units = qs.Quantity(self.data.copy(), qsunits)
-        self.raw_data_with_units = qs.Quantity(self.raw_data.copy(), qsunits)
-        self.data = self.data_with_units.magnitude
+        try:
+            self.data_with_units = qs.Quantity(self.data.copy(), qsunits)
+            self.raw_data_with_units = qs.Quantity(self.raw_data.copy(), qsunits)
+            self.data = self.data_with_units.magnitude
+        except (ValueError, LookupError) as e:
+            self._raise_unit_error(
+                e, "assign units", requested_units=self.sunits
+            )
         self.set_label()
 
     @property
@@ -280,15 +311,23 @@ class PsData:
         self.raw_data = data
 
     def to_units(self, new_units):
-        self.sunits = self._convert_string_unit(new_units)
+        converted_units = self._convert_string_unit(new_units)
+        old_sunits = self.sunits
+        self.sunits = converted_units
         qsunits = self._get_qs_unit()
-        if new_units == "degC" and str(self.data_with_units.units) == "1.0 K":
-            self.data_with_units = qs.Quantity(
-                self.data_with_units.magnitude[:] - 273.15, new_units
+        try:
+            if new_units == "degC" and str(self.data_with_units.units) == "1.0 K":
+                self.data_with_units = qs.Quantity(
+                    self.data_with_units.magnitude[:] - 273.15, new_units
+                )
+            else:
+                self.data_with_units = self.data_with_units.rescale(qsunits)
+            self.raw_data_with_units = self.raw_data_with_units.rescale(qsunits)
+        except (ValueError, LookupError) as e:
+            self.sunits = old_sunits
+            self._raise_unit_error(
+                e, "convert units", requested_units=new_units
             )
-        else:
-            self.data_with_units = self.data_with_units.rescale(qsunits)
-        self.raw_data_with_units = self.raw_data_with_units.rescale(qsunits)
         self.data = self.data_with_units.magnitude[:]
         self.raw_data = self.raw_data_with_units.magnitude
         self.set_label()
@@ -349,7 +388,12 @@ class PsData:
                 "Arithmetic operations require a PsData object or numeric "
                 "scalar, got {}".format(type(other))
             )
-        result_quantity = op(self.data_with_units, other_val)
+        try:
+            result_quantity = op(self.data_with_units, other_val)
+        except (ValueError, LookupError) as e:
+            self._raise_unit_error(
+                e, "arithmetic '{}'".format(symbol), other=other
+            )
         result_key = "({} {} {})".format(self.data_key, symbol, other_label)
         return PsData(
             data_key=result_key,
@@ -371,7 +415,12 @@ class PsData:
                 "Arithmetic operations require a PsData object or numeric "
                 "scalar, got {}".format(type(other))
             )
-        result_quantity = op(other_val, self.data_with_units)
+        try:
+            result_quantity = op(other_val, self.data_with_units)
+        except (ValueError, LookupError) as e:
+            self._raise_unit_error(
+                e, "reflected arithmetic '{}'".format(symbol), other=other
+            )
         result_key = "({} {} {})".format(other_label, symbol, self.data_key)
         return PsData(
             data_key=result_key,
@@ -426,7 +475,10 @@ class PsData:
         )
 
     def __neg__(self):
-        result_quantity = -1 * self.data_with_units
+        try:
+            result_quantity = -1 * self.data_with_units
+        except (ValueError, LookupError) as e:
+            self._raise_unit_error(e, "negation")
         result_key = "(-{})".format(self.data_key)
         return PsData(
             data_key=result_key,

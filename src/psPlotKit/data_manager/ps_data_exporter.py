@@ -174,21 +174,18 @@ class PsDataExporter:
 
             # Skip all-zero columns when requested
             if self.skip_zero_data and self._is_zero_data(ps_data):
-                _logger.info(
-                    "Skipping '{}': all values are zero".format(data_key)
-                )
+                _logger.info("Skipping '{}': all values are zero".format(data_key))
                 continue
 
             if dir_key not in grouped:
                 grouped[dir_key] = []
             grouped[dir_key].append((data_key, ps_data))
-
         return grouped
 
     def _is_zero_data(self, ps_data):
         """Return True if every value in *ps_data* is exactly zero.
 
-        Empty arrays are not considered all-zero.
+        Empty arrays are considered all-zero.
 
         Parameters
         ----------
@@ -198,15 +195,22 @@ class PsDataExporter:
         Returns
         -------
         bool
-            True if the data array is non-empty and all elements are 0.
+            True if the data array is empty or all elements are 0.
         """
         data = ps_data.data
         if data is None:
-            return False
+            return True
         arr = np.asarray(data)
+
         if arr.size == 0:
-            return False
-        return np.all(arr == 0)
+            return True
+        arr = np.nan_to_num(arr, nan=0)
+        if np.sum(np.abs(arr)) < np.finfo(float).eps * 10 or np.isnan(
+            np.sum(np.abs(arr))
+        ):
+            return True
+        return False
+        # return np.all(arr == 0
 
     def _should_export_key(self, data_key):
         """Check if a data key should be exported based on export_keys/exact_keys filters.
@@ -374,7 +378,7 @@ class PsDataExporter:
         """
         flattened = []
         for elem in data_key:
-            if isinstance(elem, tuple):
+            if isinstance(elem, (tuple, list)):
                 flattened.extend(elem)
             else:
                 flattened.append(elem)
@@ -397,7 +401,7 @@ class PsDataExporter:
         # Flatten nested tuples to determine max depth
         flattened_keys = []
         for key, _ in data_items:
-            if isinstance(key, tuple):
+            if isinstance(key, (tuple, list)):
                 flattened_keys.append(self._flatten_key(key))
             else:
                 flattened_keys.append(key)
@@ -415,15 +419,19 @@ class PsDataExporter:
             flat_key = flattened_keys[idx]
 
             # If label equals data_key, use the last tuple element as label
-            if label == data_key and isinstance(data_key, tuple):
+            if label == data_key and isinstance(data_key, (tuple, list)):
                 label = flat_key[-1]
-
+            if isinstance(label, (tuple, list)):
+                if len(label) == 1:
+                    label = str(label[0])
+                else:
+                    label = ", ".join(label)
             if units and units != "-":
+
                 full_label = "{} ({})".format(label, units)
             else:
                 full_label = str(label)
-
-            if isinstance(flat_key, tuple):
+            if isinstance(flat_key, (tuple, list)):
                 key_len = len(flat_key)
                 # Calculate starting row (align shorter tuples to bottom)
                 start_row = max_depth - key_len

@@ -382,3 +382,56 @@ class TestComplexScalarExpressions:
         a = PsData("a", "test", [10.0, 20.0, 30.0])
         result = (a - 5) / 2
         np.testing.assert_array_almost_equal(result.data, [2.5, 7.5, 12.5])
+
+
+# ---------- unit error handling ----------
+
+
+class TestUnitErrors:
+    def test_to_units_incompatible_raises_with_metadata(self, meter_ps):
+        with pytest.raises(ValueError) as excinfo:
+            meter_ps.to_units("kg")
+        msg = str(excinfo.value)
+        assert "length" in msg
+        assert "test" in msg
+        assert "kg" in msg
+        assert "m" in msg
+        assert excinfo.value.__cause__ is not None
+
+    def test_to_units_preserves_original_units_on_failure(self, meter_ps):
+        with pytest.raises(ValueError):
+            meter_ps.to_units("kg")
+        assert meter_ps.sunits == "m"
+        np.testing.assert_array_almost_equal(meter_ps.data, [10.0, 20.0, 30.0])
+
+    def test_constructor_units_incompatible_raises_with_metadata(self):
+        with pytest.raises(ValueError) as excinfo:
+            PsData("length", "test", [1.0, 2.0], import_units="m", units="kg")
+        msg = str(excinfo.value)
+        assert "length" in msg
+        assert "test" in msg
+        assert "kg" in msg
+
+    def test_assign_units_invalid_string_raises_with_metadata(self, meter_ps):
+        with pytest.raises(LookupError) as excinfo:
+            meter_ps.assign_units("totally_bogus_unit")
+        msg = str(excinfo.value)
+        assert "length" in msg
+        assert "test" in msg
+        assert "totally_bogus_unit" in msg
+
+    def test_invalid_unit_string_raises_with_metadata(self):
+        with pytest.raises(LookupError) as excinfo:
+            PsData("x", "test", [1.0], import_units="totally_bogus_unit")
+        msg = str(excinfo.value)
+        assert "x" in msg
+        assert "test" in msg
+        assert "totally_bogus_unit" in msg
+
+    def test_arithmetic_incompatible_units_raises_with_metadata(self, meter_ps, usd_ps):
+        with pytest.raises(ValueError) as excinfo:
+            meter_ps + usd_ps
+        msg = str(excinfo.value)
+        assert "length" in msg
+        assert "cost" in msg
+        assert "test" in msg
