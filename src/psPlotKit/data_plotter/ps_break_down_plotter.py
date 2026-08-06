@@ -175,16 +175,27 @@ class BreakDownPlotter:
                             color = item["color"]
                     else:
                         _label = item
-                if self.check_key_in_dir(skey, akey):
+                    # print(skey, akey, self.check_key_in_dir(skey, akey))
+
+                hatch_found = False
+                if self.hatch_groups != {}:
+                    for key in self.hatch_groups.keys():
+                        if key in str(skey):
+                            hatch_found = True
+                            break
+                if self.check_key_in_dir(skey, akey) and (
+                    self.hatch_groups == {} or hatch_found
+                ):
                     if _label is None:
                         _label = akey
                     plot_label = _label
                     cur_line = {}
                     raw_ydata = self.selected_data[skey]
-                    raw_xdata = self.selected_data[self._replace_key(skey, xdata)]
+                    raw_xdata = self.selected_data[xdata]
+                    print("plotting", skey, xdata)
+
                     cur_line["ydata"] = raw_ydata.data
                     cur_line["xdata"] = raw_xdata.data
-
                     if self.xunit == None:
                         self.xunit = raw_xdata.mpl_units
                     if self.xdata_label == None:
@@ -217,12 +228,16 @@ class BreakDownPlotter:
                         self.plot_areas[akey] = cur_line
 
         self.plot_order = []
+        print(self.area_groups, self.plot_areas)
         for akey in self.area_groups:
+            print(akey)
             if isinstance(akey, dict):
                 akey, item = list(akey.items())[0]
             for key in self.plot_areas.keys():
-                if akey == key:
+                print(akey, key)
+                if akey in key:
                     self.plot_order.append(key)
+        print(self.plot_order)
         # assert False
 
     def plotbreakdown(

@@ -730,7 +730,6 @@ class PsDataManager(dict):
             keys_to_process = list(self.keys())
         _keys_to_process = keys_to_process[:]
         for working_directory in _keys_to_process:
-            # print(data_key, self._get_data_key(working_directory), working_directory)
             if (
                 new_directory not in working_directory
                 and data_key == self._get_data_key(working_directory)
@@ -748,7 +747,10 @@ class PsDataManager(dict):
                             ukey = ud
                         elif str(data_key) not in str(ud):
                             if work_dir is None:
-                                work_dir = ud
+                                if isinstance(ud, tuple):
+                                    work_dir = [ud]
+                                else:
+                                    work_dir = ud
                             else:
                                 work_dir.append(ud)
                     if ukey is None:
@@ -772,6 +774,8 @@ class PsDataManager(dict):
                             working_directory,
                         )
                     stack_idxs.append(ukey)
+                    if isinstance(work_dir, list):
+                        work_dir = tuple(work_dir)
                     if work_dir not in unique_dirs:
                         unique_dirs[work_dir] = {
                             "dirs": [working_directory],

@@ -54,7 +54,8 @@ class WaterTapCostingPackage(PsCostingPackage):
         self.register_fraction("LCOW_capex", "LCOW")
 
     def register_product_flow(
-        self, file_key="fs.product.properties[0.0].flow_vol_phase[Liq]"
+        self,
+        file_key="fs.product.properties[0.0].flow_vol_phase[Liq]",
     ):
         self.add_parameter("product_flow", file_key=file_key)
         self.add_formula(
@@ -79,4 +80,34 @@ class WaterTapCostingPackage(PsCostingPackage):
             lambda ek: (ek.total_capital_cost * ek.capital_recovery_factor)
             / (ek.product_flow * ek.utilization_factor),
             units="USD/m**3",
+        )
+
+    def register_product_mass_flow(
+        self,
+        file_key="fs.product.properties[0.0].flow_mass_phase_comp[Liq,H2O]",
+        mass_basis="kg",
+    ):
+        self.add_parameter("product_flow", file_key=file_key)
+        self.add_formula(
+            "SEC",
+            lambda ek: (ek.aggregate_electricity_flow) / (ek.product_flow),
+            units=f"kWh/{mass_basis}",
+        )
+        self.add_formula(
+            "LCOP",
+            lambda ek: (ek.total_annualized_cost)
+            / (ek.product_flow * ek.utilization_factor),
+            units=f"USD/{mass_basis}",
+        )
+        self.add_formula(
+            "LCOP_opex",
+            lambda ek: (ek.total_operating_cost)
+            / (ek.product_flow * 0.88 * ek.utilization_factor),
+            units=f"USD/{mass_basis}",
+        )
+        self.add_formula(
+            "LCOP_capex",
+            lambda ek: (ek.total_capital_cost * ek.capital_recovery_factor)
+            / (ek.product_flow * 0.88 * ek.utilization_factor),
+            units=f"USD/{mass_basis}",
         )

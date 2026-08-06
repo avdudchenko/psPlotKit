@@ -360,6 +360,119 @@ class TestLabelPropagation:
         assert fig.data_storage.ylabel == "Tick Y"
         fig.close()
 
+    def test_xticklabel_colors_applied_to_matching_labels(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+
+        fig.set_axis_ticklabels(
+            xticklabels=["A", "B", "C"],
+            xticklabel_colors={"A": "red", "C": "blue"},
+        )
+        ax = fig.get_axis(0)
+        texts = ax.get_xticklabels()
+        assert texts[0].get_color() == "red"
+        assert texts[1].get_color() == "black"
+        assert texts[2].get_color() == "blue"
+        fig.close()
+
+    def test_yticklabel_colors_applied_to_matching_labels(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+
+        fig.set_axis_ticklabels(
+            yticklabels=["X", "Y", "Z"],
+            yticklabel_colors={"X": "green", "Z": "orange"},
+        )
+        ax = fig.get_axis(0)
+        texts = ax.get_yticklabels()
+        assert texts[0].get_color() == "green"
+        assert texts[1].get_color() == "black"
+        assert texts[2].get_color() == "orange"
+        fig.close()
+
+    def test_xticklabel_colors_none_keeps_default(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+
+        fig.set_axis_ticklabels(xticklabels=["A", "B"])
+        ax = fig.get_axis(0)
+        texts = ax.get_xticklabels()
+        assert texts[0].get_color() == "black"
+        fig.close()
+
+    def test_yticklabel_colors_none_keeps_default(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+
+        fig.set_axis_ticklabels(yticklabels=["A", "B"])
+        ax = fig.get_axis(0)
+        texts = ax.get_yticklabels()
+        assert texts[0].get_color() == "black"
+        fig.close()
+
+    def test_yticklabel_colors_persist_after_set_axis_xlabel_only(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+
+        fig.set_axis_ticklabels(
+            yticks=[0, 1, 2],
+            yticklabels=["A", "B", "C"],
+            yticklabel_colors={"A": "red", "C": "blue"},
+        )
+        fig.set_axis(xlabel="LCOW")
+
+        ax = fig.get_axis(0)
+        texts = ax.get_yticklabels()
+        assert texts[0].get_color() == "red"
+        assert texts[1].get_color() == "black"
+        assert texts[2].get_color() == "blue"
+        fig.close()
+
+    def test_xticklabel_colors_persist_after_set_axis_ylabel_only(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+
+        fig.set_axis_ticklabels(
+            xticklabels=["A", "B", "C"],
+            xticklabel_colors={"A": "red", "C": "blue"},
+        )
+        fig.set_axis(ylabel="Y Axis")
+
+        ax = fig.get_axis(0)
+        texts = ax.get_xticklabels()
+        assert texts[0].get_color() == "red"
+        assert texts[1].get_color() == "black"
+        assert texts[2].get_color() == "blue"
+        fig.close()
+
+    def test_yticklabel_colors_persist_with_shared_axes(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=2, sharex=True, sharey=True)
+
+        for i in range(4):
+            fig.plot_line([1, 2], [i + 1, i + 2], label=f"Series {i}", ax_idx=i)
+
+        fig.set_axis_ticklabels(
+            ax_idx=0,
+            yticks=[0, 1, 2],
+            yticklabels=["A", "B", "C"],
+            yticklabel_colors={"A": "red", "C": "blue"},
+        )
+        fig.set_axis(ax_idx=0, xlabel="LCOW")
+
+        ax = fig.get_axis(0)
+        texts = ax.get_yticklabels()
+        assert texts[0].get_color() == "red"
+        assert texts[1].get_color() == "black"
+        assert texts[2].get_color() == "blue"
+        fig.close()
+
 
 # ---------------------------------------------------------------------------
 # Mixed: no storage set (backwards compat)
@@ -1104,6 +1217,40 @@ class TestPanelAndSharedLegend:
         assert len(legend.get_texts()) == 2
         fig.close()
 
+    def test_add_shared_legend_offset_shifts_position(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=1, ncols=2)
+
+        fig.plot_line([1, 2], [1, 2], label="L", ax_idx=0)
+        fig.plot_line([1, 2], [2, 3], label="R", ax_idx=1)
+
+        legend_default = fig.add_shared_legend(loc="top")
+        fig.fig.canvas.draw()
+        renderer = fig.fig.canvas.get_renderer()
+        default_bbox = legend_default.get_window_extent(renderer=renderer).transformed(
+            fig.fig.transFigure.inverted()
+        )
+        default_x = (default_bbox.x0 + default_bbox.x1) / 2
+        default_y = default_bbox.y0
+
+        fig2 = FigureGenerator()
+        fig2.init_figure(nrows=1, ncols=2)
+        fig2.plot_line([1, 2], [1, 2], label="L", ax_idx=0)
+        fig2.plot_line([1, 2], [2, 3], label="R", ax_idx=1)
+        legend_offset = fig2.add_shared_legend(loc="top", x_offset=0.1, y_offset=0.05)
+        fig2.fig.canvas.draw()
+        renderer2 = fig2.fig.canvas.get_renderer()
+        offset_bbox = legend_offset.get_window_extent(renderer=renderer2).transformed(
+            fig2.fig.transFigure.inverted()
+        )
+        offset_x = (offset_bbox.x0 + offset_bbox.x1) / 2
+        offset_y = offset_bbox.y0
+
+        assert offset_x > default_x
+        assert offset_y > default_y
+        fig.close()
+        fig2.close()
+
     def test_sharex_defaults_to_small_vertical_panel_gap(self):
         fig = FigureGenerator()
         fig.init_figure(nrows=3, ncols=1, sharex=True)
@@ -1177,4 +1324,212 @@ class TestPanelAndSharedLegend:
         right_axes_bbox = fig.get_axis(1).get_window_extent(renderer)
 
         assert not left_ylabel_bbox.overlaps(right_axes_bbox)
+        fig.close()
+
+    def test_sharex_only_bottom_row_gets_xlabel_set_axis(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=2, sharex=True)
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [2, 3], label="B", ax_idx=1)
+        fig.plot_line([1, 2], [3, 4], label="C", ax_idx=2)
+        fig.plot_line([1, 2], [4, 5], label="D", ax_idx=3)
+
+        for ax_idx in range(4):
+            fig.set_axis(ax_idx=ax_idx, xlabel="X", ylabel="Y")
+
+        assert fig.get_axis(0).get_xlabel() == ""
+        assert fig.get_axis(1).get_xlabel() == ""
+        assert fig.get_axis(2).get_xlabel() == "X"
+        assert fig.get_axis(3).get_xlabel() == "X"
+        fig.close()
+
+    def test_sharey_only_leftmost_col_gets_ylabel_set_axis(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=2, sharey=True)
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [2, 3], label="B", ax_idx=1)
+        fig.plot_line([1, 2], [3, 4], label="C", ax_idx=2)
+        fig.plot_line([1, 2], [4, 5], label="D", ax_idx=3)
+
+        for ax_idx in range(4):
+            fig.set_axis(ax_idx=ax_idx, xlabel="X", ylabel="Y")
+
+        assert fig.get_axis(0).get_ylabel() == "Y"
+        assert fig.get_axis(1).get_ylabel() == ""
+        assert fig.get_axis(2).get_ylabel() == "Y"
+        assert fig.get_axis(3).get_ylabel() == ""
+        fig.close()
+
+    def test_sharex_only_bottom_row_gets_xlabel_set_axis_ticklabels(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=2, sharex=True)
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [2, 3], label="B", ax_idx=1)
+        fig.plot_line([1, 2], [3, 4], label="C", ax_idx=2)
+        fig.plot_line([1, 2], [4, 5], label="D", ax_idx=3)
+
+        for ax_idx in range(4):
+            fig.set_axis_ticklabels(ax_idx=ax_idx, xlabel="X", ylabel="Y")
+
+        assert fig.get_axis(0).get_xlabel() == ""
+        assert fig.get_axis(1).get_xlabel() == ""
+        assert fig.get_axis(2).get_xlabel() == "X"
+        assert fig.get_axis(3).get_xlabel() == "X"
+        fig.close()
+
+    def test_sharey_per_row_allows_independent_yticklabels(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=2, sharey=True)
+
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [2, 3], label="B", ax_idx=1)
+        fig.plot_line([1, 2], [3, 4], label="C", ax_idx=2)
+        fig.plot_line([1, 2], [4, 5], label="D", ax_idx=3)
+
+        fig.set_axis_ticklabels(
+            ax_idx=0,
+            yticks=[0, 1, 2],
+            yticklabels=["A", "B", "C"],
+        )
+        fig.set_axis_ticklabels(
+            ax_idx=2,
+            yticks=[0, 1, 2, 3],
+            yticklabels=["W", "X", "Y", "Z"],
+        )
+
+        ax0 = fig.get_axis(0)
+        ax2 = fig.get_axis(2)
+        assert [t.get_text() for t in ax0.get_yticklabels()] == ["A", "B", "C"]
+        assert [t.get_text() for t in ax2.get_yticklabels()] == ["W", "X", "Y", "Z"]
+        fig.close()
+
+    def test_sharex_per_column_allows_independent_xticklabels(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=2, sharex=True)
+
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [2, 3], label="B", ax_idx=1)
+        fig.plot_line([1, 2], [3, 4], label="C", ax_idx=2)
+        fig.plot_line([1, 2], [4, 5], label="D", ax_idx=3)
+
+        fig.set_axis_ticklabels(
+            ax_idx=0,
+            xticks=[0, 1],
+            xticklabels=["A", "B"],
+        )
+        fig.set_axis_ticklabels(
+            ax_idx=1,
+            xticks=[0, 1, 2],
+            xticklabels=["X", "Y", "Z"],
+        )
+
+        ax2 = fig.get_axis(2)
+        ax3 = fig.get_axis(3)
+        assert [t.get_text() for t in ax2.get_xticklabels()] == ["A", "B"]
+        assert [t.get_text() for t in ax3.get_xticklabels()] == ["X", "Y", "Z"]
+        fig.close()
+
+
+class TestAddPanelLabel:
+    def test_left_label_inside_axes(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+
+        result = fig.add_panel_label("Figure A", position="left")
+        ax = fig.get_axis(0)
+        texts = ax.texts
+        assert len(texts) == 1
+        assert texts[0].get_text() == "Figure A"
+        assert result is fig
+        fig.close()
+
+    def test_right_label_inside_axes(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+
+        fig.add_panel_label("Figure B", position="right")
+        ax = fig.get_axis(0)
+        texts = ax.texts
+        assert len(texts) == 1
+        assert texts[0].get_text() == "Figure B"
+        fig.close()
+
+    def test_invalid_position_raises(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        with pytest.raises(
+            ValueError,
+            match="position must be 'left', 'right', 'above left', or 'above right'",
+        ):
+            fig.add_panel_label("X", position="center")
+        fig.close()
+
+    def test_default_fontsize_uses_label_size(self):
+        fig = FigureGenerator(label_size=14)
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+        fig.add_panel_label("A")
+        ax = fig.get_axis(0)
+        assert ax.texts[0].get_fontsize() == 14
+        fig.close()
+
+    def test_bold_weight_applied(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+        fig.add_panel_label("A", bold=True)
+        ax = fig.get_axis(0)
+        assert ax.texts[0].get_weight() == "bold"
+        fig.close()
+
+    def test_fluent_chaining(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        returned = fig.add_panel_label("A").add_panel_label("B", position="right")
+        assert returned is fig
+        ax = fig.get_axis(0)
+        assert len(ax.texts) == 2
+        fig.close()
+
+    def test_multi_panel_labeling(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=1, ncols=2)
+        fig.plot_line([1, 2], [3, 4], label="L", ax_idx=0)
+        fig.plot_line([1, 2], [4, 5], label="R", ax_idx=1)
+
+        fig.add_panel_label("A", ax_idx=0, position="left")
+        fig.add_panel_label("B", ax_idx=1, position="left")
+
+        assert len(fig.get_axis(0).texts) == 1
+        assert len(fig.get_axis(1).texts) == 1
+        assert fig.get_axis(0).texts[0].get_text() == "A"
+        assert fig.get_axis(1).texts[0].get_text() == "B"
+        fig.close()
+
+    def test_above_left_places_text_above_axes(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+
+        fig.add_panel_label("Figure A", position="above left", y_pad=0.03)
+        ax = fig.get_axis(0)
+        text = ax.texts[0]
+        assert text.get_text() == "Figure A"
+        assert text.get_ha() == "left"
+        assert text.get_va() == "bottom"
+        fig.close()
+
+    def test_above_right_places_text_above_axes(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        fig.plot_line([1, 2], [3, 4], label="L")
+
+        fig.add_panel_label("Figure B", position="above right", y_pad=0.03)
+        ax = fig.get_axis(0)
+        text = ax.texts[0]
+        assert text.get_text() == "Figure B"
+        assert text.get_ha() == "right"
+        assert text.get_va() == "bottom"
         fig.close()

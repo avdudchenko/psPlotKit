@@ -299,6 +299,7 @@ class FigureGenerator:
             label_size=label_size,
             svg_font_setting=svg_font_setting,
         )
+        self.label_size = label_size
         self.colormaps = colormap
         self.map_mode = False
         self.contour_mode = False
@@ -313,6 +314,8 @@ class FigureGenerator:
         self.figure_description = figure_description
         self.twinx, self.twiny = False, False
         self._auto_labels = {"x": None, "y": None, "z": None}
+        self._custom_xticklabels = {}
+        self._custom_yticklabels = {}
 
     @staticmethod
     def get_plot_options_manager():
@@ -446,13 +449,17 @@ class FigureGenerator:
         if panel_shape is not None:
             nrows, ncols = panel_shape
         if grid is not None:
-            sharey = True
+            sharey = "row"
             ncols = grid
         if panel_size is not None:
             panel_width, panel_height = panel_size
             width = panel_width * ncols
             height = panel_height * nrows
         self.projection = projection
+        if sharex is True:
+            sharex = "col"
+        if sharey is True:
+            sharey = "row"
         if projection == None:
             self.mode_3d = False
             self.fig, self.ax = plt.subplots(
@@ -498,11 +505,11 @@ class FigureGenerator:
         auto_hspace = None
         if not constrained_layout:
             if sharey and ncols > 1 and wspace is None and subplot_adjust is None:
-                auto_wspace = 0.05
+                auto_wspace = 0.075
             elif not sharey and ncols > 1 and wspace is None and subplot_adjust is None:
                 auto_wspace = 0.35
             if sharex and nrows > 1 and hspace is None:
-                auto_hspace = 0.05
+                auto_hspace = 0.075
             elif not sharex and nrows > 1 and hspace is None:
                 auto_hspace = 0.45
 
@@ -593,6 +600,40 @@ class FigureGenerator:
         else:
             for axis in self.ax:
                 yield axis
+
+    def _is_bottom_row(self, ax_idx):
+        """Return True if the axis is in the bottom row of a shared-x layout."""
+        if not self.sharex:
+            return True
+        norm_idx = self._normalize_ax_idx(ax_idx)
+        if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
+            return norm_idx[0] == self.idx_totals[0] - 1
+        return True
+
+    def _is_leftmost_col(self, ax_idx):
+        """Return True if the axis is in the leftmost column of a shared-y layout."""
+        if not self.sharey:
+            return True
+        norm_idx = self._normalize_ax_idx(ax_idx)
+        if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
+            return norm_idx[1] == 0
+        return True
+
+    def _mark_custom_xticklabels(self, ax_idx):
+        """Record that custom x tick labels have been set for this axis."""
+        self._custom_xticklabels[self._normalize_ax_idx(ax_idx)] = True
+
+    def _mark_custom_yticklabels(self, ax_idx):
+        """Record that custom y tick labels have been set for this axis."""
+        self._custom_yticklabels[self._normalize_ax_idx(ax_idx)] = True
+
+    def _has_custom_xticklabels(self, ax_idx):
+        """Return True if custom x tick labels were set for this axis."""
+        return self._normalize_ax_idx(ax_idx) in self._custom_xticklabels
+
+    def _has_custom_yticklabels(self, ax_idx):
+        """Return True if custom y tick labels were set for this axis."""
+        return self._normalize_ax_idx(ax_idx) in self._custom_yticklabels
 
     def get_color(self, ax, val_update=0):
         """Get the current color index for the given axis and optionally advance it.
@@ -1752,6 +1793,8 @@ class FigureGenerator:
         set_aspect="auto",
         xscale="interp",
         yscale="interp",
+        xticklabel_colors=None,
+        yticklabel_colors=None,
         **kwargs,
     ):
         """Set custom tick labels and positions for map or categorical axes.
@@ -1773,6 +1816,12 @@ class FigureGenerator:
             yformat: Format specification for y tick labels.
             xscale: Scale for x-axis map function ('interp', 'linear', 'log').
             yscale: Scale for y-axis map function ('interp', 'linear', 'log').
+            xticklabel_colors: Optional dict mapping x tick label text to a
+                matplotlib color string. Matching tick labels are colored
+                individually; unmatched labels keep the default color.
+            yticklabel_colors: Optional dict mapping y tick label text to a
+                matplotlib color string. Matching tick labels are colored
+                individually; unmatched labels keep the default color.
         """
         if xticklabels is not None:
             if rotate == False:
@@ -1815,7 +1864,7 @@ class FigureGenerator:
 
             if xformat is not None:
                 xticklabels = self.format_ticks(xticklabels, xformat)
-            self.get_axis(ax_idx).set_xticklabels(
+            xtick_texts = self.get_axis(ax_idx).set_xticklabels(
                 xticklabels,
                 rotation=angle,
                 ha=ha,
@@ -1823,6 +1872,13 @@ class FigureGenerator:
                 rotation_mode=rotation_mode,
                 fontsize=fontsize,
             )
+            if xticklabel_colors is not None and xtick_texts:
+                for text in xtick_texts:
+                    label = text.get_text()
+                    if label and label in xticklabel_colors:
+                        text.set_color(xticklabel_colors[label])
+            if xticklabels is not None:
+                self._mark_custom_xticklabels(ax_idx)
 
         if yticklabels is not None:
             if rotate == False:
@@ -1862,7 +1918,7 @@ class FigureGenerator:
                 self.get_axis(ax_idx).set_yticks(yticks)
             if yformat is not None:
                 yticklabels = self.format_ticks(yticklabels, yformat)
-            self.get_axis(ax_idx).set_yticklabels(
+            ytick_texts = self.get_axis(ax_idx).set_yticklabels(
                 yticklabels,
                 rotation=angle,
                 ha=ha,
@@ -1870,17 +1926,111 @@ class FigureGenerator:
                 rotation_mode=rotation_mode,
                 fontsize=fontsize,
             )
+            if yticklabel_colors is not None and ytick_texts:
+                for text in ytick_texts:
+                    label = text.get_text()
+                    if label and label in yticklabel_colors:
+                        text.set_color(yticklabel_colors[label])
+            if yticklabels is not None:
+                self._mark_custom_yticklabels(ax_idx)
         if xlabel is not None:
-            xlabel = self._resolve_auto_label(xlabel, "x")
-            self.get_axis(ax_idx).set_xlabel(xlabel, labelpad=xlabelpad)
-            if self.data_storage is not None:
-                self.data_storage.update_labels(xlabel=xlabel)
+            if self._is_bottom_row(ax_idx):
+                xlabel = self._resolve_auto_label(xlabel, "x")
+                self.get_axis(ax_idx).set_xlabel(xlabel, labelpad=xlabelpad)
+                if self.data_storage is not None:
+                    self.data_storage.update_labels(xlabel=xlabel)
         if ylabel is not None:
-            ylabel = self._resolve_auto_label(ylabel, "y")
-            self.get_axis(ax_idx).set_ylabel(ylabel, labelpad=ylabelpad)
-            if self.data_storage is not None:
-                self.data_storage.update_labels(ylabel=ylabel)
+            if self._is_leftmost_col(ax_idx):
+                ylabel = self._resolve_auto_label(ylabel, "y")
+                self.get_axis(ax_idx).set_ylabel(ylabel, labelpad=ylabelpad)
+                if self.data_storage is not None:
+                    self.data_storage.update_labels(ylabel=ylabel)
         self.get_axis(ax_idx).set_aspect(set_aspect)
+
+    def add_panel_label(
+        self,
+        text,
+        ax_idx=0,
+        position="left",
+        fontsize=None,
+        bold=False,
+        x_pad=0.005,
+        y_pad=0.005,
+        va="top",
+        ha="left",
+        color="black",
+        zorder=100,
+        **kwargs,
+    ):
+        """Add a text label inside the top-left or top-right of a panel, or above it.
+
+        Useful for marking sub-panel identifiers such as ``"Figure A"``.
+
+        Args:
+            text: Label text to render.
+            ax_idx: Axis index to annotate.
+            position: One of ``"left"``, ``"right"``, ``"above left"``, or
+                ``"above right"``. ``"left"``/``"right"`` place the text
+                inside the panel at the top-left/top-right. ``"above left"``
+                /``"above right"`` place the text just above the panel box,
+                aligned to the left/right respectively.
+            fontsize: Font size in points. Defaults to the current label
+                size if omitted.
+            bold: If True, render the text in bold weight.
+            x_pad: Horizontal padding in axes coordinates.
+            y_pad: Vertical padding in axes coordinates. For ``"left"`` and
+                ``"right"`` this is the distance from the bottom edge inside
+                the panel; pass a larger value such as ``0.98`` to place the
+                text near the top. For ``"above left"`` and ``"above right"``
+                this is the distance above the panel box; the default small
+                value places the label just above the axes spine.
+            va: Vertical alignment of the text.
+            ha: Horizontal alignment of the text.
+            color: Text color.
+            zorder: Drawing order for the text.
+            **kwargs: Additional keyword arguments forwarded to
+                ``Axes.text``.
+        """
+        ax = self.get_axis(ax_idx)
+        if position == "left":
+            ha = "left"
+            x = x_pad
+            y = y_pad
+        elif position == "right":
+            ha = "right"
+            x = 1 - x_pad
+            y = y_pad
+        elif position == "above left":
+            ha = "left"
+            x = x_pad
+            y = 1 + y_pad
+            va = "bottom"
+        elif position == "above right":
+            ha = "right"
+            x = 1 - x_pad
+            y = 1 + y_pad
+            va = "bottom"
+        else:
+            raise ValueError(
+                "position must be 'left', 'right', 'above left', or 'above right'"
+            )
+        if fontsize is None:
+            fontsize = self.label_size if hasattr(self, "label_size") else 12
+        weight = "bold" if bold else "normal"
+        ax.text(
+            x,
+            y,
+            text,
+            transform=ax.transAxes,
+            fontsize=fontsize,
+            color=color,
+            va=va,
+            ha=ha,
+            weight=weight,
+            zorder=zorder,
+            **kwargs,
+        )
+        return self
 
     def set_fig_label(
         self, xlabel=None, ylabel=None, x_pad=-0.04, y_pad=0.05, label_size=12
@@ -2025,7 +2175,11 @@ class FigureGenerator:
             self.get_axis(ax_idx).set_zticks(zticks)
             if zlims is None:
                 self.get_axis(ax_idx).set_zlim(zticks[0], zticks[-1])
-        if yticks is None and ylims is None:
+        if (
+            yticks is None
+            and ylims is None
+            and not self._has_custom_yticklabels(ax_idx)
+        ):
             try:
                 ylims = self.auto_gen_lims("datay")
                 yticks = np.linspace(ylims[0], ylims[1], default_yticks)
@@ -2033,7 +2187,11 @@ class FigureGenerator:
                 self.get_axis(ax_idx).set_ylim(yticks[0], yticks[-1])
             except (ValueError, KeyError):
                 _logger.warning("Failed to auto-generate y-axis ticks")
-        if xticks is None and xlims is None:
+        if (
+            xticks is None
+            and xlims is None
+            and not self._has_custom_xticklabels(ax_idx)
+        ):
             try:
                 xlims = self.auto_gen_lims("datax")
                 xticks = np.linspace(xlims[0], xlims[1], default_xticks)
@@ -2108,19 +2266,21 @@ class FigureGenerator:
                     ticker.LogLocator(numticks=999, subs="auto")
                 )
         if xlabel is not None:
-            xlabel = self._resolve_auto_label(xlabel, "x")
-            self.get_axis(ax_idx).set_xlabel(
-                xlabel, labelpad=xlabelpad, rotation=xlabelrotate
-            )
-            if self.data_storage is not None:
-                self.data_storage.update_labels(xlabel=xlabel)
+            if self._is_bottom_row(ax_idx):
+                xlabel = self._resolve_auto_label(xlabel, "x")
+                self.get_axis(ax_idx).set_xlabel(
+                    xlabel, labelpad=xlabelpad, rotation=xlabelrotate
+                )
+                if self.data_storage is not None:
+                    self.data_storage.update_labels(xlabel=xlabel)
         if ylabel is not None:
-            ylabel = self._resolve_auto_label(ylabel, "y")
-            self.get_axis(ax_idx).set_ylabel(
-                ylabel, labelpad=ylabelpad, rotation=ylabelrotate
-            )
-            if self.data_storage is not None:
-                self.data_storage.update_labels(ylabel=ylabel)
+            if self._is_leftmost_col(ax_idx):
+                ylabel = self._resolve_auto_label(ylabel, "y")
+                self.get_axis(ax_idx).set_ylabel(
+                    ylabel, labelpad=ylabelpad, rotation=ylabelrotate
+                )
+                if self.data_storage is not None:
+                    self.data_storage.update_labels(ylabel=ylabel)
         if zlabel is not None and self.mode_3d:
             zlabel = self._resolve_auto_label(zlabel, "z")
             self.get_axis(ax_idx).set_zlabel(
@@ -2131,14 +2291,16 @@ class FigureGenerator:
         self.get_axis(ax_idx).set_aspect(set_aspect)
         if xaxiscolor is not None:
             self.get_axis(ax_idx).xaxis.label.set_color(xaxiscolor)
-            self.get_axis(ax_idx).tick_params(axis="x", colors=xaxiscolor)
+            if not self._has_custom_xticklabels(ax_idx):
+                self.get_axis(ax_idx).tick_params(axis="x", colors=xaxiscolor)
             if self.twinx and ax_idx == 1:
                 self.get_axis(ax_idx).spines["top"].set_color(xaxiscolor)
             else:
                 self.get_axis(ax_idx).spines["bottom"].set_color(xaxiscolor)
         if yaxiscolor is not None:
             self.get_axis(ax_idx).yaxis.label.set_color(yaxiscolor)
-            self.get_axis(ax_idx).tick_params(axis="y", colors=yaxiscolor)
+            if not self._has_custom_yticklabels(ax_idx):
+                self.get_axis(ax_idx).tick_params(axis="y", colors=yaxiscolor)
             if self.twiny and ax_idx == 1:
                 self.get_axis(ax_idx).spines["right"].set_color(yaxiscolor)
             else:
@@ -2224,6 +2386,8 @@ class FigureGenerator:
         deduplicate=True,
         reverse_legend=False,
         ax_indices=None,
+        y_offset=0,
+        x_offset=0,
         **kwargs,
     ):
         """Add a figure-level legend shared across multiple subplots.
@@ -2238,6 +2402,10 @@ class FigureGenerator:
                 insertion order.
             reverse_legend: If True, reverse final legend order.
             ax_indices: Optional iterable of axis indices to include.
+            x_offset: Horizontal offset applied to the default legend anchor
+                for ``top``, ``bottom``, and ``right`` placements.
+            y_offset: Vertical offset applied to the default legend anchor
+                for ``top``, ``bottom``, and ``right`` placements.
 
         Returns:
             The created matplotlib Legend instance.
@@ -2272,9 +2440,9 @@ class FigureGenerator:
             ncol = max(1, len(labels))
 
         loc_map = {
-            "top": ("upper center", (0.5, 1.02)),
-            "bottom": ("lower center", (0.5, -0.02)),
-            "right": ("center left", (1.02, 0.5)),
+            "top": ("upper center", (0.5 + x_offset, 1.02 + y_offset)),
+            "bottom": ("lower center", (0.5 + x_offset, -0.02 + y_offset)),
+            "right": ("center left", (1.02 + x_offset, 0.5 + y_offset)),
         }
 
         if loc in loc_map:
@@ -2283,7 +2451,6 @@ class FigureGenerator:
         else:
             mpl_loc = loc
             anchor = bbox_to_anchor
-
         legend = self.fig.legend(
             handles,
             labels,
@@ -2299,11 +2466,15 @@ class FigureGenerator:
         )
 
         if loc == "top" and bbox_to_anchor is None:
-            self._auto_adjust_top_shared_legend(legend)
+            self._auto_adjust_top_shared_legend(
+                legend, x_offset=x_offset, y_offset=y_offset
+            )
 
         return legend
 
-    def _auto_adjust_top_shared_legend(self, legend, gap=0.01, max_top=0.995):
+    def _auto_adjust_top_shared_legend(
+        self, legend, gap=0.01, max_top=0.995, x_offset=0, y_offset=0
+    ):
         """Place top shared legend close to panels, adjusting top margin if needed."""
         self.fig.canvas.draw()
         renderer = self.fig.canvas.get_renderer()
@@ -2320,9 +2491,9 @@ class FigureGenerator:
             self.fig.canvas.draw()
             panel_top = max(axis.get_position().y1 for axis in self._iter_axes())
 
-        target_anchor_y = panel_top + gap + legend_height
+        target_anchor_y = panel_top + gap + legend_height + y_offset
         legend.set_bbox_to_anchor(
-            (0.5, target_anchor_y), transform=self.fig.transFigure
+            (0.5 + x_offset, target_anchor_y), transform=self.fig.transFigure
         )
         self.fig.canvas.draw()
 
