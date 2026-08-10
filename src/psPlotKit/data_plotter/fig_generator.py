@@ -4,6 +4,7 @@ import yaml
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as PathEffects
+import matplotlib.patches as mpatches
 import numpy as np
 import sigfig
 from decimal import Decimal
@@ -316,6 +317,7 @@ class FigureGenerator:
         self._auto_labels = {"x": None, "y": None, "z": None}
         self._custom_xticklabels = {}
         self._custom_yticklabels = {}
+        self._legend_proxies = []
 
     @staticmethod
     def get_plot_options_manager():
@@ -1364,9 +1366,10 @@ class FigureGenerator:
         z = np.array(z)
         if z.ndim == 1:
             for i, iz in enumerate(z):
-                ix = np.where(abs(x[i] - np.array(x_uniqu)) < 1e-5)[0]
-                iy = np.where(abs(y[i] - np.array(y_uniqu)) < 1e-5)[0]
+                ix = np.where(abs(x[i] - np.array(x_uniqu)) < 1e-8)[0]
+                iy = np.where(abs(y[i] - np.array(y_uniqu)) < 1e-8)[0]
                 z_map[iy, ix] = iz
+                # print(x[i], y[i], iz)
         else:
             z_map = z
         return z_map, x_uniqu, y_uniqu
@@ -1714,7 +1717,123 @@ class FigureGenerator:
             self.data_storage, MapDataStorage
         ):
             self.data_storage.register_data(datax, datay, map_data)
-        print(self.data_storage)
+
+    def outline_region(
+        self,
+        xdata,
+        ydata,
+        zdata,
+        ax_idx=0,
+        color="black",
+        linewidth=1.5,
+        label=None,
+        fill=False,
+        hatch=None,
+        threshold=1,
+        **kwargs,
+    ):
+        """Outline a region on top of a ``plot_map`` using a binary mask.
+
+        The region mask is provided in the same format as ``plot_map``:
+        ``xdata``, ``ydata``, and ``zdata`` arrays.  Pixels where ``zdata``
+        equals ``threshold`` are treated as inside the region and will be
+        outlined.  Pixels where ``zdata`` is ``None`` or ``NaN`` are treated
+        as background.
+
+        Args:
+            xdata: X-coordinate array (same format as ``plot_map``).
+            ydata: Y-coordinate array (same format as ``plot_map``).
+            zdata: Region mask array. Values equal to ``threshold`` define
+                the region to outline.
+            ax_idx: Axis index to draw the outline on.
+            color: Outline and hatch color.
+            linewidth: Outline thickness in points.
+            label: Legend label for the outlined region.
+            fill: If True and ``hatch`` is not set, fill the region with a
+                transparent solid color.
+            hatch: Hatch pattern string. When set, the region is filled with
+                the hatch pattern in ``color``, regardless of ``fill``.
+            threshold: Value in ``zdata`` that marks the region boundary.
+            **kwargs: Additional keyword arguments forwarded to
+                ``Axes.contour`` / ``Axes.contourf``.
+
+        Returns:
+            The matplotlib ``ContourSet`` for the outline.
+        """
+        xdata = self._unwrap_psdata(xdata)
+        ydata = self._unwrap_psdata(ydata)
+        zdata = self._unwrap_psdata(zdata)
+
+        map_data, _, _ = self.build_map_data(xdata, ydata, zdata)
+
+        # Build binary mask: 1 where zdata == threshold, 0 elsewhere.
+        # build_map_data propagates None/NaN through the grid.
+        mask = np.where(np.isnan(map_data), 0, np.where(map_data == threshold, 1, 0))
+
+        x = np.arange(map_data.shape[1])
+        y = np.arange(map_data.shape[0])
+        xx, yy = np.meshgrid(x, y)
+
+        ax = self.get_axis(ax_idx)
+
+        if hatch is not None:
+            try:
+                existing = len(ax.collections)
+                cs_hatch = ax.contourf(
+                    xx,
+                    yy,
+                    mask,
+                    levels=[0.5, 1.5],
+                    colors=["none"],
+                    hatches=[hatch],
+                    extend="neither",
+                    **kwargs,
+                )
+                for coll in ax.collections[existing:]:
+                    coll.set_hatch(hatch)
+                    coll.set_edgecolor(color)
+                    coll.set_linewidth(0.5)
+            except ValueError as e:
+                _logger.warning(
+                    "Failed to apply hatch pattern '%s': %s",
+                    hatch,
+                    e,
+                )
+        elif fill:
+            ax.contourf(
+                xx,
+                yy,
+                mask,
+                levels=[0.5, 1.5],
+                colors=[color],
+                alpha=0.2,
+                **kwargs,
+            )
+
+        cs = ax.contour(
+            xx,
+            yy,
+            mask,
+            levels=[0.5],
+            colors=[color],
+            linewidths=[linewidth],
+            **kwargs,
+        )
+
+        if label is not None:
+            proxy = mpatches.Rectangle(
+                (0, 0),
+                1,
+                1,
+                facecolor="none",
+                edgecolor=color,
+                linewidth=linewidth,
+                hatch=hatch if hatch is not None else None,
+            )
+            proxy.set_label(label)
+            self._legend_proxies.append(proxy)
+
+        return cs
 
     def gen_map_function(self, axisdata, scale="linear"):
         """Generate a mapping function from data values to pixel indices.
@@ -2348,34 +2467,78 @@ class FigureGenerator:
         ncol=1,
         handlelength=1.2,
         reverse_legend=False,
+        x_offset=0,
+        y_offset=0,
         **kwargs,
     ):
         """Add a legend to the figure.
 
         Args:
-            loc: Legend location string.
+            loc: Legend location string. One of ``best``, ``upper right``,
+                ``upper left``, ``lower left``, ``lower right``, ``right``,
+                ``center left``, ``center right``, ``lower center``,
+                ``upper center``, ``center``, ``top``, ``bottom``, or
+                ``right``. The special values ``top``, ``bottom``, and
+                ``right`` place the legend outside the axes area.
             fontsize: Legend font size.
             ax_idx: Axis index to attach the legend to.
             bbox_to_anchor: Bounding box anchor for legend positioning.
             ncol: Number of legend columns.
             reverse_legend: If True, reverse the order of legend entries.
+            x_offset: Horizontal offset applied to the default legend anchor
+                for ``top``, ``bottom``, and ``right`` placements.
+            y_offset: Vertical offset applied to the default legend anchor
+                for ``top``, ``bottom``, and ``right`` placements.
         """
         handles, labels = self.get_axis(ax_idx).get_legend_handles_labels()
+        if self._legend_proxies:
+            proxy_handles, proxy_labels = zip(
+                *((p, p.get_label()) for p in self._legend_proxies)
+            )
+            handles = list(handles) + list(proxy_handles)
+            labels = list(labels) + list(proxy_labels)
         if reverse_legend:
             handles, labels = handles[::-1], labels[::-1]
-        self.get_axis(ax_idx).legend(
-            handles,
-            labels,
-            frameon=False,
-            loc=loc,
-            ncol=ncol,
-            prop={"size": fontsize},
-            labelspacing=0.2,
-            columnspacing=0.4,
-            handlelength=1,
-            handleheight=1,
-            bbox_to_anchor=bbox_to_anchor,
-        )
+
+        ax = self.get_axis(ax_idx)
+        loc_map = {
+            "top": ("upper center", (0.5 + x_offset, 1.02 + y_offset)),
+            "bottom": ("lower center", (0.5 + x_offset, -0.02 + y_offset)),
+            "right": ("center left", (1.02 + x_offset, 0.5 + y_offset)),
+        }
+
+        if loc in loc_map:
+            mpl_loc, default_anchor = loc_map[loc]
+            anchor = bbox_to_anchor if bbox_to_anchor is not None else default_anchor
+            self.fig.legend(
+                handles,
+                labels,
+                frameon=False,
+                loc=mpl_loc,
+                bbox_to_anchor=anchor,
+                ncol=ncol,
+                prop={"size": fontsize},
+                labelspacing=0.2,
+                columnspacing=0.4,
+                handlelength=1,
+                handleheight=1,
+                **kwargs,
+            )
+        else:
+            ax.legend(
+                handles,
+                labels,
+                frameon=False,
+                loc=loc,
+                ncol=ncol,
+                prop={"size": fontsize},
+                labelspacing=0.2,
+                columnspacing=0.4,
+                handlelength=1,
+                handleheight=1,
+                bbox_to_anchor=bbox_to_anchor,
+                **kwargs,
+            )
 
     def add_shared_legend(
         self,
@@ -2421,6 +2584,13 @@ class FigureGenerator:
             axis_handles, axis_labels = axis.get_legend_handles_labels()
             handles.extend(axis_handles)
             labels.extend(axis_labels)
+
+        if self._legend_proxies:
+            proxy_handles, proxy_labels = zip(
+                *((p, p.get_label()) for p in self._legend_proxies)
+            )
+            handles.extend(proxy_handles)
+            labels.extend(proxy_labels)
 
         if deduplicate:
             unique_handles = []

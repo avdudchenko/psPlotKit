@@ -3,6 +3,7 @@ import csv
 import numpy as np
 import pytest
 import matplotlib
+import matplotlib.colors
 
 matplotlib.use("Agg")  # non-interactive backend for CI
 
@@ -1532,4 +1533,156 @@ class TestAddPanelLabel:
         assert text.get_text() == "Figure B"
         assert text.get_ha() == "right"
         assert text.get_va() == "bottom"
+        fig.close()
+
+
+class TestOutlineRegion:
+    def test_outline_region_creates_contour(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        base_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        base_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        base_z = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+        fig.plot_map(xdata=base_x, ydata=base_y, zdata=base_z)
+
+        region_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        region_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        region_z = np.array([0, 0, 0, 0, 1, 0, 0, 0, 0])
+        cs = fig.outline_region(region_x, region_y, region_z)
+
+        ax = fig.get_axis(0)
+        assert cs is not None
+        fig.close()
+
+    def test_outline_region_with_none_values(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        base_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        base_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        base_z = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+        fig.plot_map(xdata=base_x, ydata=base_y, zdata=base_z)
+
+        region_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        region_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        region_z = np.array(
+            [None, None, None, None, 1, None, None, None, None]
+        )
+        cs = fig.outline_region(region_x, region_y, region_z)
+
+        ax = fig.get_axis(0)
+        assert cs is not None
+        fig.close()
+
+    def test_outline_region_fill_and_hatch(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        base_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        base_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        base_z = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+        fig.plot_map(xdata=base_x, ydata=base_y, zdata=base_z)
+
+        region_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        region_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        region_z = np.array([0, 0, 0, 0, 1, 0, 0, 0, 0])
+        fig.outline_region(
+            region_x, region_y, region_z, fill=True, hatch="//", color="red"
+        )
+
+        ax = fig.get_axis(0)
+        assert len(ax.collections) >= 1
+        fig.close()
+
+    def test_outline_region_hatch_without_fill(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        base_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        base_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        base_z = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+        fig.plot_map(xdata=base_x, ydata=base_y, zdata=base_z)
+
+        region_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        region_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        region_z = np.array([0, 0, 0, 0, 1, 0, 0, 0, 0])
+        fig.outline_region(
+            region_x, region_y, region_z, fill=False, hatch="//", color="blue"
+        )
+
+        ax = fig.get_axis(0)
+        assert len(ax.collections) >= 1
+        fig.close()
+
+    def test_outline_region_hatch_matches_outline_color(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        base_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        base_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        base_z = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+        fig.plot_map(xdata=base_x, ydata=base_y, zdata=base_z)
+
+        region_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        region_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        region_z = np.array([0, 0, 0, 0, 1, 0, 0, 0, 0])
+        fig.outline_region(
+            region_x, region_y, region_z, fill=False, hatch="//", color="green"
+        )
+
+        ax = fig.get_axis(0)
+        edgecolors = [c.get_edgecolor() for c in ax.collections if len(c.get_edgecolor()) > 0]
+        assert len(edgecolors) > 0
+        assert np.allclose(edgecolors[0][0][:3], matplotlib.colors.to_rgb("green"))
+        fig.close()
+
+    def test_outline_region_label_adds_legend_proxy(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        base_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        base_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        base_z = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+        fig.plot_map(xdata=base_x, ydata=base_y, zdata=base_z)
+
+        fig.outline_region(
+            np.array([0, 1, 2, 0, 1, 2, 0, 1, 2]),
+            np.array([0, 0, 0, 1, 1, 1, 2, 2, 2]),
+            np.array([0, 0, 0, 0, 1, 0, 0, 0, 0]),
+            label="Region A",
+        )
+        assert len(fig._legend_proxies) == 1
+        assert fig._legend_proxies[0].get_label() == "Region A"
+        fig.close()
+
+    def test_outline_region_custom_color_and_linewidth(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        base_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        base_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        base_z = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+        fig.plot_map(xdata=base_x, ydata=base_y, zdata=base_z)
+
+        cs = fig.outline_region(
+            np.array([0, 1, 2, 0, 1, 2, 0, 1, 2]),
+            np.array([0, 0, 0, 1, 1, 1, 2, 2, 2]),
+            np.array([0, 0, 0, 0, 1, 0, 0, 0, 0]),
+            color="red",
+            linewidth=3,
+        )
+        assert cs is not None
+        fig.close()
+
+    def test_outline_region_hatch_skipped_when_coordinates_have_nan(self):
+        fig = FigureGenerator()
+        fig.init_figure()
+        base_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        base_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        base_z = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+        fig.plot_map(xdata=base_x, ydata=base_y, zdata=base_z)
+
+        region_x = np.array([0, 1, np.nan, 0, 1, 2, 0, 1, 2])
+        region_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        region_z = np.array([0, 0, 0, 0, 1, 0, 0, 0, 0])
+        fig.outline_region(
+            region_x, region_y, region_z, fill=False, hatch="//", color="green"
+        )
+
+        ax = fig.get_axis(0)
+        assert len(ax.collections) >= 1
         fig.close()
