@@ -1540,7 +1540,7 @@ class FigureGenerator:
         cs.changed()
         return cs
 
-    def digitize_map(self, map_data, levels, colors):
+    def digitize_map(self, map_data, levels, colors, eps=1e-8):
         """Discretize map data into level bins and assign colormap colors.
 
         Args:
@@ -1551,16 +1551,19 @@ class FigureGenerator:
         Returns:
             Tuple of (vmin, vmax) for the digitized data range.
         """
+        indexed_map_data = np.copy(map_data)
         for i, lu in enumerate(levels[1:]):
             lb, ub = levels[i], levels[i + 1]
             average_level = i
             if len(map_data.shape) == 1:
-                idx = np.where((map_data < ub) & (map_data > lb))[0]
-                map_data[idx] = average_level
+                idx = np.where((map_data < ub) & (map_data > (lb + eps)))[0]
+                indexed_map_data[idx] = average_level
             else:
-                for m in map_data:
-                    idx = np.where((m < ub) & (m > lb))[0]
-                    m[idx] = average_level
+                for j, m in enumerate(map_data):
+                    idx = np.where((m < ub) & (m > (lb + eps)))[0]
+                    indexed_map_data[j][idx] = average_level
+        # # print(indexed_map_data)
+        # assert False
         if colors is None:
             _colors = []
             for l, _ in enumerate(levels[1:]):
@@ -1574,7 +1577,7 @@ class FigureGenerator:
         self.colorMaps["color_map"] = ListedColormap(_colors)
 
         self.digitized = True
-        return 0, i + 1
+        return indexed_map_data, 0, i + 1
 
     def plot_map(
         self,
@@ -1667,7 +1670,9 @@ class FigureGenerator:
             vmin = np.nanmin(map_data)
             vmax = np.nanmax(map_data)
         if digitize_levels is not None:
-            vmin, vmax = self.digitize_map(map_data, digitize_levels, digitize_colors)
+            map_data, vmin, vmax = self.digitize_map(
+                map_data, digitize_levels, digitize_colors
+            )
 
         if zscale == "log":
             norm = LogNorm(vmin=vmin, vmax=vmax)
