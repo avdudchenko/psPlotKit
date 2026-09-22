@@ -318,6 +318,7 @@ class FigureGenerator:
         self._custom_xticklabels = {}
         self._custom_yticklabels = {}
         self._legend_proxies = []
+        self._subplot_legend_labels = []
 
     @staticmethod
     def get_plot_options_manager():
@@ -603,23 +604,55 @@ class FigureGenerator:
             for axis in self.ax:
                 yield axis
 
+    def _ax_grid_position(self, ax_idx):
+        """Return the (row, col) grid position of an axis selection.
+
+        Handles 1-D layouts (n x 1 and 1 x n), where the axes are stored as a
+        flat list and ``_normalize_ax_idx`` returns a plain integer, as well as
+        axes objects passed in directly.
+
+        Returns:
+            (row, col) tuple, or None if the position cannot be determined.
+        """
+        nrows, ncols = self.idx_totals
+        norm_idx = self._normalize_ax_idx(ax_idx)
+        if isinstance(norm_idx, tuple):
+            return int(norm_idx[0]), int(norm_idx[1])
+        if isinstance(norm_idx, (int, np.integer)):
+            if ncols == 1:
+                return int(norm_idx), 0
+            if nrows == 1:
+                return 0, int(norm_idx)
+            return int(norm_idx) // ncols, int(norm_idx) % ncols
+        # An axes object was passed in; ask matplotlib where it lives.
+        get_spec = getattr(norm_idx, "get_subplotspec", None)
+        if get_spec is not None:
+            spec = get_spec()
+            if spec is not None:
+                return spec.rowspan.stop - 1, spec.colspan.start
+        return None
+
     def _is_bottom_row(self, ax_idx):
         """Return True if the axis is in the bottom row of a shared-x layout."""
-        if not self.sharex:
+        if self.sharex not in (True, "all", "col"):
             return True
-        norm_idx = self._normalize_ax_idx(ax_idx)
-        if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
-            return norm_idx[0] == self.idx_totals[0] - 1
-        return True
+        if self.idx_totals[0] <= 1:
+            return True
+        position = self._ax_grid_position(ax_idx)
+        if position is None:
+            return True
+        return position[0] == self.idx_totals[0] - 1
 
     def _is_leftmost_col(self, ax_idx):
         """Return True if the axis is in the leftmost column of a shared-y layout."""
-        if not self.sharey:
+        if self.sharey not in (True, "all", "row"):
             return True
-        norm_idx = self._normalize_ax_idx(ax_idx)
-        if self.idx_totals[0] > 1 and self.idx_totals[1] > 1:
-            return norm_idx[1] == 0
-        return True
+        if self.idx_totals[1] <= 1:
+            return True
+        position = self._ax_grid_position(ax_idx)
+        if position is None:
+            return True
+        return position[1] == 0
 
     def _mark_custom_xticklabels(self, ax_idx):
         """Record that custom x tick labels have been set for this axis."""
@@ -2058,17 +2091,23 @@ class FigureGenerator:
             if yticklabels is not None:
                 self._mark_custom_yticklabels(ax_idx)
         if xlabel is not None:
+            xlabel = self._resolve_auto_label(xlabel, "x")
             if self._is_bottom_row(ax_idx):
-                xlabel = self._resolve_auto_label(xlabel, "x")
                 self.get_axis(ax_idx).set_xlabel(xlabel, labelpad=xlabelpad)
-                if self.data_storage is not None:
-                    self.data_storage.update_labels(xlabel=xlabel)
+            else:
+                # Shared x-axis: only the bottom row carries the label.
+                self.get_axis(ax_idx).set_xlabel("")
+            if self.data_storage is not None:
+                self.data_storage.update_labels(xlabel=xlabel)
         if ylabel is not None:
+            ylabel = self._resolve_auto_label(ylabel, "y")
             if self._is_leftmost_col(ax_idx):
-                ylabel = self._resolve_auto_label(ylabel, "y")
                 self.get_axis(ax_idx).set_ylabel(ylabel, labelpad=ylabelpad)
-                if self.data_storage is not None:
-                    self.data_storage.update_labels(ylabel=ylabel)
+            else:
+                # Shared y-axis: only the leftmost column carries the label.
+                self.get_axis(ax_idx).set_ylabel("")
+            if self.data_storage is not None:
+                self.data_storage.update_labels(ylabel=ylabel)
         self.get_axis(ax_idx).set_aspect(set_aspect)
 
     def add_panel_label(
@@ -2390,21 +2429,27 @@ class FigureGenerator:
                     ticker.LogLocator(numticks=999, subs="auto")
                 )
         if xlabel is not None:
+            xlabel = self._resolve_auto_label(xlabel, "x")
             if self._is_bottom_row(ax_idx):
-                xlabel = self._resolve_auto_label(xlabel, "x")
                 self.get_axis(ax_idx).set_xlabel(
                     xlabel, labelpad=xlabelpad, rotation=xlabelrotate
                 )
-                if self.data_storage is not None:
-                    self.data_storage.update_labels(xlabel=xlabel)
+            else:
+                # Shared x-axis: only the bottom row carries the label.
+                self.get_axis(ax_idx).set_xlabel("")
+            if self.data_storage is not None:
+                self.data_storage.update_labels(xlabel=xlabel)
         if ylabel is not None:
+            ylabel = self._resolve_auto_label(ylabel, "y")
             if self._is_leftmost_col(ax_idx):
-                ylabel = self._resolve_auto_label(ylabel, "y")
                 self.get_axis(ax_idx).set_ylabel(
                     ylabel, labelpad=ylabelpad, rotation=ylabelrotate
                 )
-                if self.data_storage is not None:
-                    self.data_storage.update_labels(ylabel=ylabel)
+            else:
+                # Shared y-axis: only the leftmost column carries the label.
+                self.get_axis(ax_idx).set_ylabel("")
+            if self.data_storage is not None:
+                self.data_storage.update_labels(ylabel=ylabel)
         if zlabel is not None and self.mode_3d:
             zlabel = self._resolve_auto_label(zlabel, "z")
             self.get_axis(ax_idx).set_zlabel(
@@ -2463,6 +2508,20 @@ class FigureGenerator:
         if self.data_storage is not None:
             self.data_storage.update_labels(zlabel=zlabel)
 
+    def _record_subplot_legend_labels(self, labels):
+        """Remember labels already shown in a per-subplot legend."""
+        for label in labels:
+            if label and label not in self._subplot_legend_labels:
+                self._subplot_legend_labels.append(label)
+
+    def clear_subplot_legend_labels(self):
+        """Forget all labels recorded from per-subplot legends.
+
+        Call this if a later :meth:`add_shared_legend` should show entries that
+        were already drawn in a subplot legend.
+        """
+        self._subplot_legend_labels = []
+
     def add_legend(
         self,
         loc="best",
@@ -2474,6 +2533,7 @@ class FigureGenerator:
         reverse_legend=False,
         x_offset=0,
         y_offset=0,
+        track_labels=True,
         **kwargs,
     ):
         """Add a legend to the figure.
@@ -2494,6 +2554,9 @@ class FigureGenerator:
                 for ``top``, ``bottom``, and ``right`` placements.
             y_offset: Vertical offset applied to the default legend anchor
                 for ``top``, ``bottom``, and ``right`` placements.
+            track_labels: If True, record the labels shown here so that a later
+                :meth:`add_shared_legend` call can omit them and avoid showing
+                the same entry twice.
         """
         handles, labels = self.get_axis(ax_idx).get_legend_handles_labels()
         if self._legend_proxies:
@@ -2504,6 +2567,9 @@ class FigureGenerator:
             labels = list(labels) + list(proxy_labels)
         if reverse_legend:
             handles, labels = handles[::-1], labels[::-1]
+
+        if track_labels:
+            self._record_subplot_legend_labels(labels)
 
         ax = self.get_axis(ax_idx)
         loc_map = {
@@ -2556,6 +2622,7 @@ class FigureGenerator:
         ax_indices=None,
         y_offset=0,
         x_offset=0,
+        exclude_subplot_labels=True,
         **kwargs,
     ):
         """Add a figure-level legend shared across multiple subplots.
@@ -2574,9 +2641,13 @@ class FigureGenerator:
                 for ``top``, ``bottom``, and ``right`` placements.
             y_offset: Vertical offset applied to the default legend anchor
                 for ``top``, ``bottom``, and ``right`` placements.
+            exclude_subplot_labels: If True, omit entries already shown by a
+                previous :meth:`add_legend` call, so a label does not appear in
+                both a subplot legend and the shared legend.
 
         Returns:
-            The created matplotlib Legend instance.
+            The created matplotlib Legend instance, or None if no entries
+            remain to show.
         """
         if ax_indices is None:
             axes = list(self._iter_axes())
@@ -2607,6 +2678,26 @@ class FigureGenerator:
                     unique_handles.append(handle)
                     unique_labels.append(label)
             handles, labels = unique_handles, unique_labels
+
+        if exclude_subplot_labels and self._subplot_legend_labels:
+            already_shown = set(self._subplot_legend_labels)
+            kept = [
+                (handle, label)
+                for handle, label in zip(handles, labels)
+                if label not in already_shown
+            ]
+            if kept:
+                handles, labels = [list(item) for item in zip(*kept)]
+            else:
+                handles, labels = [], []
+
+        if not labels:
+            _logger.warning(
+                "No legend entries remain for the shared legend; all labels are "
+                "already shown in subplot legends. Pass "
+                "exclude_subplot_labels=False to show them anyway."
+            )
+            return None
 
         if reverse_legend:
             handles, labels = handles[::-1], labels[::-1]

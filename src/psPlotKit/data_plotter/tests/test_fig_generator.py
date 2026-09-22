@@ -1206,6 +1206,91 @@ class TestPanelAndSharedLegend:
         assert len(fig.fig.legends) == 1
         fig.close()
 
+    def test_add_shared_legend_omits_labels_shown_in_subplot_legend(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=1, sharex=True)
+
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [2, 3], label="B", ax_idx=0)
+        fig.plot_line([1, 2], [3, 4], label="C", ax_idx=1)
+        fig.plot_line([1, 2], [4, 5], label="D", ax_idx=1)
+
+        fig.add_legend(ax_idx=0, loc="best")
+        legend = fig.add_shared_legend(loc="top")
+        labels = [text.get_text() for text in legend.get_texts()]
+
+        assert labels == ["C", "D"]
+        fig.close()
+
+    def test_add_shared_legend_keeps_subplot_labels_when_opted_out(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=1, sharex=True)
+
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [3, 4], label="C", ax_idx=1)
+
+        fig.add_legend(ax_idx=0, loc="best")
+        legend = fig.add_shared_legend(loc="top", exclude_subplot_labels=False)
+        labels = [text.get_text() for text in legend.get_texts()]
+
+        assert labels == ["A", "C"]
+        fig.close()
+
+    def test_add_legend_track_labels_false_leaves_shared_legend_intact(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=1, sharex=True)
+
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [3, 4], label="C", ax_idx=1)
+
+        fig.add_legend(ax_idx=0, loc="best", track_labels=False)
+        legend = fig.add_shared_legend(loc="top")
+        labels = [text.get_text() for text in legend.get_texts()]
+
+        assert labels == ["A", "C"]
+        fig.close()
+
+    def test_add_shared_legend_returns_none_when_all_labels_already_shown(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=1, sharex=True)
+
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [3, 4], label="A", ax_idx=1)
+
+        fig.add_legend(ax_idx=0, loc="best")
+
+        assert fig.add_shared_legend(loc="top") is None
+        assert len(fig.fig.legends) == 0
+        fig.close()
+
+    def test_clear_subplot_legend_labels_restores_shared_entries(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=1, sharex=True)
+
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [3, 4], label="C", ax_idx=1)
+
+        fig.add_legend(ax_idx=0, loc="best")
+        fig.clear_subplot_legend_labels()
+        legend = fig.add_shared_legend(loc="top")
+        labels = [text.get_text() for text in legend.get_texts()]
+
+        assert labels == ["A", "C"]
+        fig.close()
+
+    def test_add_shared_legend_unaffected_without_subplot_legend(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=1, sharex=True)
+
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [3, 4], label="C", ax_idx=1)
+
+        legend = fig.add_shared_legend(loc="top")
+        labels = [text.get_text() for text in legend.get_texts()]
+
+        assert labels == ["A", "C"]
+        fig.close()
+
     def test_add_shared_legend_right_location(self):
         fig = FigureGenerator()
         fig.init_figure(nrows=1, ncols=2)
@@ -1359,6 +1444,67 @@ class TestPanelAndSharedLegend:
         assert fig.get_axis(1).get_ylabel() == ""
         assert fig.get_axis(2).get_ylabel() == "Y"
         assert fig.get_axis(3).get_ylabel() == ""
+        fig.close()
+
+    def test_sharex_single_column_only_bottom_row_gets_xlabel(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=1, sharex=True)
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.plot_line([1, 2], [2, 3], label="B", ax_idx=1)
+
+        for ax_idx in range(2):
+            fig.set_axis(ax_idx=ax_idx, xlabel="X", ylabel="Y")
+
+        assert fig.get_axis(0).get_xlabel() == ""
+        assert fig.get_axis(1).get_xlabel() == "X"
+        # y-axis is not shared, so every panel keeps its own y label
+        assert fig.get_axis(0).get_ylabel() == "Y"
+        assert fig.get_axis(1).get_ylabel() == "Y"
+        fig.close()
+
+    def test_sharey_single_row_only_leftmost_col_gets_ylabel(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=1, ncols=3, sharey=True)
+        for ax_idx in range(3):
+            fig.plot_line([1, 2], [1, 2], label="A", ax_idx=ax_idx)
+            fig.set_axis(ax_idx=ax_idx, xlabel="X", ylabel="Y")
+
+        assert fig.get_axis(0).get_ylabel() == "Y"
+        assert fig.get_axis(1).get_ylabel() == ""
+        assert fig.get_axis(2).get_ylabel() == ""
+        # x-axis is not shared, so every panel keeps its own x label
+        for ax_idx in range(3):
+            assert fig.get_axis(ax_idx).get_xlabel() == "X"
+        fig.close()
+
+    def test_sharex_single_column_ticklabels_only_bottom_row_gets_xlabel(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=3, ncols=1, sharex=True)
+        for ax_idx in range(3):
+            fig.plot_line([1, 2], [1, 2], label="A", ax_idx=ax_idx)
+            fig.set_axis_ticklabels(ax_idx=ax_idx, xlabel="X")
+
+        assert fig.get_axis(0).get_xlabel() == ""
+        assert fig.get_axis(1).get_xlabel() == ""
+        assert fig.get_axis(2).get_xlabel() == "X"
+        fig.close()
+
+    def test_sharex_label_suppression_by_axes_object(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=1, sharex=True)
+        assert fig._is_bottom_row(fig.get_axis(0)) is False
+        assert fig._is_bottom_row(fig.get_axis(1)) is True
+        fig.close()
+
+    def test_sharex_still_records_suppressed_label_for_csv(self):
+        fig = FigureGenerator()
+        fig.init_figure(nrows=2, ncols=1, sharex=True)
+        fig.plot_line([1, 2], [1, 2], label="A", ax_idx=0)
+        fig.set_axis(ax_idx=0, xlabel="Time", ylabel="Value")
+
+        # the label is hidden on the plot but still used as a CSV header
+        assert fig.get_axis(0).get_xlabel() == ""
+        assert fig.data_storage.xlabel == "Time"
         fig.close()
 
     def test_sharex_only_bottom_row_gets_xlabel_set_axis_ticklabels(self):
@@ -1564,9 +1710,7 @@ class TestOutlineRegion:
 
         region_x = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
         region_y = np.array([0, 0, 0, 1, 1, 1, 2, 2, 2])
-        region_z = np.array(
-            [None, None, None, None, 1, None, None, None, None]
-        )
+        region_z = np.array([None, None, None, None, 1, None, None, None, None])
         cs = fig.outline_region(region_x, region_y, region_z)
 
         ax = fig.get_axis(0)
@@ -1627,7 +1771,9 @@ class TestOutlineRegion:
         )
 
         ax = fig.get_axis(0)
-        edgecolors = [c.get_edgecolor() for c in ax.collections if len(c.get_edgecolor()) > 0]
+        edgecolors = [
+            c.get_edgecolor() for c in ax.collections if len(c.get_edgecolor()) > 0
+        ]
         assert len(edgecolors) > 0
         assert np.allclose(edgecolors[0][0][:3], matplotlib.colors.to_rgb("green"))
         fig.close()
